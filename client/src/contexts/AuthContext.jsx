@@ -48,15 +48,15 @@ export const AuthProvider = ({ children }) => {
         console.log('Profile missing for user, creating now...');
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
-          .insert([{ 
-            id: currentUser.id, 
-            email: currentUser.email, 
+          .insert([{
+            id: currentUser.id,
+            email: currentUser.email,
             full_name: currentUser.user_metadata?.full_name || 'System User',
             role: currentUser.email.includes('admin') ? 'admin' : 'member'
           }])
           .select()
           .single();
-        
+
         if (createError) {
           console.error('Failed to create profile:', createError);
         } else {
@@ -98,6 +98,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAdmin: profile?.role === 'admin',
     isLead: profile?.role === 'lead',
+    canManageTasks: profile?.role === 'lead',
     signIn,
     signOut,
     refreshProfile
