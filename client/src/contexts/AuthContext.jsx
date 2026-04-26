@@ -82,6 +82,10 @@ export const AuthProvider = ({ children }) => {
     if (data) setProfile(data);
   };
 
+  const signIn = (email, password) => {
+    return supabase.auth.signInWithPassword({ email, password });
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -94,6 +98,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     isAdmin: profile?.role === 'admin',
     isLead: profile?.role === 'lead',
+    signIn,
     signOut,
     refreshProfile
   };
