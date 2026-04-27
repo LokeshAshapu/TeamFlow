@@ -20,7 +20,9 @@ import {
   WifiOff,
   RefreshCw,
   LogOut,
-  AlertCircle
+  AlertCircle,
+  Send,
+  User
 } from 'lucide-react';
 
 const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) => {
@@ -85,12 +87,31 @@ const Meetings = () => {
     participants,
     activeParticipants,
     isMeetingActive,
-    connectionStatus
+    connectionStatus,
+    messages,
+    sendMessage
   } = useWebRTC(roomId, profile?.id, profile?.full_name);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    if (showChat) {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, showChat]);
+
+  const handleSendMessage = (e) => {
+    e?.preventDefault();
+    if (chatMessage.trim()) {
+      sendMessage(chatMessage);
+      setChatMessage('');
+    }
+  };
 
   useEffect(() => {
     if (profile?.team_id) {
@@ -299,8 +320,12 @@ const Meetings = () => {
                 </button>
 
                 <button 
-                  className="p-3.5 bg-gray-50 text-secondary hover:bg-gray-100 rounded-2xl transition-all"
-                  title="Chat (Coming Soon)"
+                  onClick={() => {
+                    setShowChat(!showChat);
+                    setShowParticipants(false);
+                  }}
+                  className={`p-3.5 rounded-2xl transition-all ${showChat ? 'bg-primary/10 text-primary' : 'bg-gray-50 text-secondary hover:bg-gray-100'}`}
+                  title="Chat"
                 >
                   <MessageSquare size={22} />
                 </button>
@@ -342,7 +367,7 @@ const Meetings = () => {
                         {p.userName?.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-sm font-bold text-secondary">
+                        <span className="text-sm font-bold text-secondary truncate max-w-[120px]">
                           {p.userName} {p.userId === profile?.id && '(You)'}
                         </span>
                         <span className="text-[10px] text-gray-400 flex items-center gap-1">
@@ -366,6 +391,76 @@ const Meetings = () => {
                   <Users size={16} />
                   Invite Others
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Chat Sidebar */}
+          {showChat && (
+            <div className="w-80 bg-white rounded-3xl border border-gray-100 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+              <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+                <h3 className="font-bold text-secondary flex items-center gap-2">
+                  Live Chat
+                  <span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full">{messages.length}</span>
+                </h3>
+                <button 
+                  onClick={() => setShowChat(false)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-400">
+                    <MessageSquare size={40} className="mb-4 opacity-20" />
+                    <p className="text-sm font-medium">No messages yet. Start the conversation!</p>
+                  </div>
+                ) : (
+                  messages.map((msg) => (
+                    <div 
+                      key={msg.id} 
+                      className={`flex flex-col ${msg.senderId === profile?.id ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-bold text-gray-400">
+                          {msg.senderId === profile?.id ? 'You' : msg.senderName}
+                        </span>
+                        <span className="text-[10px] text-gray-300">
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className={`px-4 py-2 rounded-2xl text-sm max-w-[90%] break-words ${
+                        msg.senderId === profile?.id 
+                          ? 'bg-primary text-white rounded-tr-none' 
+                          : 'bg-gray-100 text-secondary rounded-tl-none'
+                      }`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              <div className="p-4 bg-gray-50 border-t border-gray-100">
+                <form onSubmit={handleSendMessage} className="relative">
+                  <input 
+                    type="text"
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="w-full bg-white border border-gray-200 rounded-2xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                  />
+                  <button 
+                    type="submit"
+                    disabled={!chatMessage.trim()}
+                    className="absolute right-2 top-1.5 p-2 bg-primary text-white rounded-xl shadow-lg shadow-blue-500/20 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all"
+                  >
+                    <Send size={18} />
+                  </button>
+                </form>
               </div>
             </div>
           )}

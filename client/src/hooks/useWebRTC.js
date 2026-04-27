@@ -7,6 +7,7 @@ export const useWebRTC = (roomId, userId, userName) => {
   const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
+  const [messages, setMessages] = useState([]);
   const channelRef = useRef(null);
   const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
   const sessionId = useRef(Math.random().toString(36).substring(7)).current;
@@ -244,6 +245,16 @@ export const useWebRTC = (roomId, userId, userName) => {
           // Ignore candidate errors
         }
       })
+      .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
+        console.log('Received chat message:', payload);
+        setMessages(prev => [...prev, {
+          id: Math.random().toString(36).substring(7),
+          senderId: payload.senderId,
+          senderName: payload.senderName,
+          content: payload.content,
+          timestamp: new Date().toISOString()
+        }]);
+      })
       .subscribe(async (status) => {
         console.log('Channel subscription status:', status);
         if (status === 'SUBSCRIBED') {
@@ -317,23 +328,85 @@ export const useWebRTC = (roomId, userId, userName) => {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       const videoTrack = screenStream.getVideoTracks()[0];
       
+      // Update local stream for local tile visibility
+      if (localStream) {
+        const currentVideoTrack = localStream.getVideoTracks()[0];
+        if (currentVideoTrack) {
+          localStream.removeTrack(currentVideoTrack);
+          localStream.addTrack(videoTrack);
+          // Trigger a re-render by setting a "new" stream object (clone or state update)
+          setLocalStream(new MediaStream(localStream.getTracks()));
+        }
+      }
+
       Object.values(peersRef.current).forEach(({ pc }) => {
-        const sender = pc.getSenders().find(s => s.track.kind === 'video');
-        if (sender) sender.replaceTrack(videoTrack);
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          sender.replaceTrack(videoTrack);
+        } else {
+          // If no video sender exists, add the track
+          pc.addTrack(videoTrack, localStream);
+        }
       });
 
       videoTrack.onended = () => {
-        if (localStream) {
-          const cameraTrack = localStream.getVideoTracks()[0];
-          Object.values(peersRef.current).forEach(({ pc }) => {
-            const sender = pc.getSenders().find(s => s.track.kind === 'video');
-            if (sender) sender.replaceTrack(cameraTrack);
-          });
-        }
+        stopScreenShare(videoTrack);
       };
+
+      return screenStream;
     } catch (err) {
       console.error('Failed to share screen', err);
     }
+  };
+
+  const stopScreenShare = async (screenTrack) => {
+    try {
+      // Re-acquire camera stream if needed, or just revert to the original if we kept it
+      // For simplicity, let's just re-get the user media for camera
+      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const cameraTrack = cameraStream.getVideoTracks()[0];
+
+      if (localStream) {
+        const currentTrack = localStream.getVideoTracks()[0];
+        if (currentTrack) {
+          localStream.removeTrack(currentTrack);
+          localStream.addTrack(cameraTrack);
+          setLocalStream(new MediaStream(localStream.getTracks()));
+        }
+      }
+
+      Object.values(peersRef.current).forEach(({ pc }) => {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) sender.replaceTrack(cameraTrack);
+      });
+
+      if (screenTrack) screenTrack.stop();
+    } catch (err) {
+      console.error('Failed to stop screen share', err);
+    }
+  };
+
+  const sendMessage = (content) => {
+    if (!channelRef.current || !content.trim()) return;
+
+    const message = {
+      senderId: userId,
+      senderName: userName,
+      content: content.trim()
+    };
+
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'chat-message',
+      payload: message
+    });
+
+    // Add to local state immediately
+    setMessages(prev => [...prev, {
+      id: Math.random().toString(36).substring(7),
+      ...message,
+      timestamp: new Date().toISOString()
+    }]);
   };
 
   return {
@@ -347,6 +420,8 @@ export const useWebRTC = (roomId, userId, userName) => {
     participants,
     activeParticipants: participants.filter(p => p.isStreaming),
     isMeetingActive: participants.some(p => p.isStreaming),
-    connectionStatus
+    connectionStatus,
+    messages,
+    sendMessage
   };
 };
