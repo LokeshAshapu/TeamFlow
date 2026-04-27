@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import io from 'socket.io-client';
-
-const SOCKET_SERVER = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import { supabase } from '../lib/supabase';
 
 export const useWebRTC = (roomId, userId, userName) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [isJoined, setIsJoined] = useState(false);
-  const socketRef = useRef(null);
-  const peersRef = useRef({}); // Map socketId to { pc, makingOffer, ignoreOffer, isSettingRemoteAnswerPending }
+  const channelRef = useRef(null);
+  const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
+  const sessionId = useRef(Math.random().toString(36).substring(7)).current;
 
   const configuration = {
     iceServers: [
@@ -17,54 +16,64 @@ export const useWebRTC = (roomId, userId, userName) => {
     ]
   };
 
-  const handleUserLeft = useCallback((socketId) => {
-    if (peersRef.current[socketId]) {
-      peersRef.current[socketId].pc.close();
-      delete peersRef.current[socketId];
+  const handleUserLeft = useCallback((peerSessionId) => {
+    if (peersRef.current[peerSessionId]) {
+      peersRef.current[peerSessionId].pc.close();
+      delete peersRef.current[peerSessionId];
       setRemoteStreams(prev => {
         const next = { ...prev };
-        delete next[socketId];
+        delete next[peerSessionId];
         return next;
       });
     }
   }, []);
 
-  const createPeerConnection = useCallback(async (socketId) => {
-    if (peersRef.current[socketId]) return peersRef.current[socketId].pc;
+  const createPeerConnection = useCallback(async (peerSessionId) => {
+    if (peersRef.current[peerSessionId]) return peersRef.current[peerSessionId].pc;
 
+    console.log('Creating PC for session:', peerSessionId);
     const pc = new RTCPeerConnection(configuration);
     const peerData = {
       pc,
       makingOffer: false,
-      ignoreOffer: false,
-      isSettingRemoteAnswerPending: false
+      ignoreOffer: false
     };
-    peersRef.current[socketId] = peerData;
+    peersRef.current[peerSessionId] = peerData;
 
-    // Politeness logic: lexicographical comparison of socket IDs
-    const isPolite = socketRef.current.id < socketId;
+    // Politeness logic: lexicographical comparison of session IDs
+    const isPolite = sessionId < peerSessionId;
 
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
 
     pc.onicecandidate = ({ candidate }) => {
-      socketRef.current.emit('ice-candidate', { to: socketId, candidate });
+      if (candidate) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'ice-candidate',
+          payload: { from: sessionId, to: peerSessionId, candidate }
+        });
+      }
     };
 
     pc.ontrack = ({ streams }) => {
+      console.log('Received remote track from:', peerSessionId);
       setRemoteStreams(prev => ({
         ...prev,
-        [socketId]: streams[0]
+        [peerSessionId]: streams[0]
       }));
     };
 
     pc.onnegotiationneeded = async () => {
       try {
-        console.log('Negotiation needed for:', socketId);
         peerData.makingOffer = true;
         await pc.setLocalDescription();
-        socketRef.current.emit('offer', { to: socketId, offer: pc.localDescription });
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'offer',
+          payload: { from: sessionId, to: peerSessionId, offer: pc.localDescription }
+        });
       } catch (err) {
         console.error('Negotiation error:', err);
       } finally {
@@ -72,101 +81,107 @@ export const useWebRTC = (roomId, userId, userName) => {
       }
     };
 
-    pc.onsignalingstatechange = () => {
-      console.log('Signaling state change:', pc.signalingState, 'for:', socketId);
-    };
-
     pc.oniceconnectionstatechange = () => {
-      console.log('ICE state change:', pc.iceConnectionState, 'for:', socketId);
       if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-        handleUserLeft(socketId);
+        handleUserLeft(peerSessionId);
       }
     };
 
     return pc;
-  }, [localStream, handleUserLeft]);
+  }, [localStream, handleUserLeft, sessionId]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
 
-    console.log('Connecting to room:', roomId);
-    socketRef.current = io(SOCKET_SERVER);
-    
-    socketRef.current.on('user-joined', async ({ socketId, userName: joinedName }) => {
-      console.log('User joined event:', joinedName, socketId);
-      await createPeerConnection(socketId);
-    });
-
-    socketRef.current.on('offer', async ({ from, offer }) => {
-      try {
-        console.log('Received offer from:', from);
-        const pc = await createPeerConnection(from);
-        const peerData = peersRef.current[from];
-        const isPolite = socketRef.current.id && socketRef.current.id < from;
-
-        const offerCollision = peerData.makingOffer || pc.signalingState !== 'stable';
-        peerData.ignoreOffer = !isPolite && offerCollision;
-
-        if (peerData.ignoreOffer) {
-          console.log('Ignoring offer collision from:', from);
-          return;
-        }
-
-        if (offerCollision) {
-          console.log('Handling offer collision (polite peer) with:', from);
-          await Promise.all([
-            pc.setLocalDescription({ type: 'rollback' }),
-            pc.setRemoteDescription(offer)
-          ]);
-        } else {
-          await pc.setRemoteDescription(offer);
-        }
-
-        await pc.setLocalDescription();
-        socketRef.current.emit('answer', { to: from, answer: pc.localDescription });
-      } catch (err) {
-        console.error('Offer error:', err);
+    console.log('Joining Supabase channel:', roomId, 'as session:', sessionId);
+    const channel = supabase.channel(roomId, {
+      config: {
+        presence: { key: sessionId }
       }
     });
+    channelRef.current = channel;
 
-    socketRef.current.on('answer', async ({ from, answer }) => {
-      try {
-        console.log('Received answer from:', from);
-        const peerData = peersRef.current[from];
-        if (peerData) {
-          await peerData.pc.setRemoteDescription(answer);
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        Object.keys(state).forEach(peerId => {
+          if (peerId !== sessionId) {
+            createPeerConnection(peerId);
+          }
+        });
+      })
+      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
+        leftPresences.forEach(p => handleUserLeft(p.presence_ref));
+      })
+      .on('broadcast', { event: 'offer' }, async ({ payload }) => {
+        if (payload.to !== sessionId) return;
+        try {
+          console.log('Received offer from:', payload.from);
+          const pc = await createPeerConnection(payload.from);
+          const peerData = peersRef.current[payload.from];
+          const isPolite = sessionId < payload.from;
+
+          const offerCollision = peerData.makingOffer || pc.signalingState !== 'stable';
+          peerData.ignoreOffer = !isPolite && offerCollision;
+
+          if (peerData.ignoreOffer) return;
+
+          if (offerCollision) {
+            await Promise.all([
+              pc.setLocalDescription({ type: 'rollback' }),
+              pc.setRemoteDescription(payload.offer)
+            ]);
+          } else {
+            await pc.setRemoteDescription(payload.offer);
+          }
+
+          await pc.setLocalDescription();
+          channel.send({
+            type: 'broadcast',
+            event: 'answer',
+            payload: { from: sessionId, to: payload.from, answer: pc.localDescription }
+          });
+        } catch (err) {
+          console.error('Offer error:', err);
         }
-      } catch (err) {
-        console.error('Answer error:', err);
-      }
-    });
-
-    socketRef.current.on('ice-candidate', async ({ from, candidate }) => {
-      try {
-        const peerData = peersRef.current[from];
-        if (peerData) {
-          await peerData.pc.addIceCandidate(candidate);
+      })
+      .on('broadcast', { event: 'answer' }, async ({ payload }) => {
+        if (payload.to !== sessionId) return;
+        try {
+          const peerData = peersRef.current[payload.from];
+          if (peerData) {
+            await peerData.pc.setRemoteDescription(payload.answer);
+          }
+        } catch (err) {
+          console.error('Answer error:', err);
         }
-      } catch (err) {
-        // Ignore errors for candidates arriving before descriptions
-      }
-    });
-
-    socketRef.current.on('user-left', ({ socketId }) => {
-      handleUserLeft(socketId);
-    });
-
-    socketRef.current.emit('join-room', { roomId, userId, userName });
+      })
+      .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
+        if (payload.to !== sessionId) return;
+        try {
+          const peerData = peersRef.current[payload.from];
+          if (peerData) {
+            await peerData.pc.addIceCandidate(payload.candidate);
+          }
+        } catch (err) {
+          // Ignore candidate errors
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ userId, userName, joinedAt: new Date().toISOString() });
+        }
+      });
 
     return () => {
-      socketRef.current.disconnect();
+      channel.unsubscribe();
       if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
       }
       Object.values(peersRef.current).forEach(p => p.pc.close());
       peersRef.current = {};
     };
-  }, [roomId, userId, userName, createPeerConnection, handleUserLeft]);
+  }, [roomId, userId, userName, createPeerConnection, handleUserLeft, sessionId]);
 
   const startStream = async () => {
     try {
