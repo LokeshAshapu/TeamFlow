@@ -108,16 +108,19 @@ export const useWebRTC = (roomId, userId, userName) => {
         console.log('Presence Sync State:', state);
         
         // Convert presence state to list of participant info
-        const allParticipants = Object.values(state).flat().map(p => ({
+        const allUsers = Object.values(state).flat().map(p => ({
           sessionId: p.presence_ref,
           userId: p.userId,
           userName: p.userName,
+          isStreaming: p.isStreaming,
           joinedAt: p.joinedAt
         }));
-        setParticipants(allParticipants);
+        setParticipants(allUsers);
 
-        Object.keys(state).forEach(peerId => {
-          if (peerId !== sessionId) {
+        // Only create peer connections for users who are actually streaming
+        Object.values(state).flat().forEach(p => {
+          const peerId = p.presence_ref;
+          if (peerId !== sessionId && p.isStreaming) {
             createPeerConnection(peerId);
           }
         });
@@ -132,11 +135,19 @@ export const useWebRTC = (roomId, userId, userName) => {
                 sessionId: p.presence_ref,
                 userId: p.userId,
                 userName: p.userName,
+                isStreaming: p.isStreaming,
                 joinedAt: p.joinedAt
               });
             }
           });
           return next;
+        });
+        
+        // If a newly joined user is already streaming, connect to them
+        newPresences.forEach(p => {
+          if (p.presence_ref !== sessionId && p.isStreaming) {
+            createPeerConnection(p.presence_ref);
+          }
         });
       })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
@@ -200,6 +211,13 @@ export const useWebRTC = (roomId, userId, userName) => {
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           console.log('Successfully subscribed to channel');
+          // Track immediately as NOT streaming
+          await channel.track({ 
+            userId, 
+            userName, 
+            isStreaming: false,
+            joinedAt: new Date().toISOString() 
+          });
         }
       });
 
@@ -222,11 +240,12 @@ export const useWebRTC = (roomId, userId, userName) => {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
       });
       
-      // Start tracking presence ONLY after stream is started
+      // Update tracking to indicate we are now streaming
       if (channelRef.current) {
         await channelRef.current.track({ 
           userId, 
           userName, 
+          isStreaming: true,
           joinedAt: new Date().toISOString() 
         });
       }
@@ -284,6 +303,7 @@ export const useWebRTC = (roomId, userId, userName) => {
     startScreenShare,
     isJoined,
     participants,
-    isMeetingActive: participants.length > 0
+    activeParticipants: participants.filter(p => p.isStreaming),
+    isMeetingActive: participants.some(p => p.isStreaming)
   };
 };

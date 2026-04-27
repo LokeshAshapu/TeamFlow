@@ -56,6 +56,7 @@ const Meetings = () => {
     startScreenShare,
     isJoined,
     participants,
+    activeParticipants,
     isMeetingActive
   } = useWebRTC(roomId, profile?.id, profile?.full_name);
 
@@ -89,7 +90,7 @@ const Meetings = () => {
     window.location.reload();
   };
 
-  const participantCount = participants.length;
+  const participantCount = activeParticipants.length;
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6 animate-slide-in">
@@ -136,17 +137,17 @@ const Meetings = () => {
             {isMeetingActive ? (
               <div className="flex flex-col items-center gap-3">
                 <p className="text-sm font-medium">
-                  {participants.map(p => p.userName).join(', ')} {participants.length === 1 ? 'is' : 'are'} already in the meeting.
+                  {activeParticipants.map(p => p.userName).join(', ')} {activeParticipants.length === 1 ? 'is' : 'are'} already in the meeting.
                 </p>
                 <div className="flex -space-x-2">
-                  {participants.slice(0, 3).map((p, i) => (
+                  {activeParticipants.slice(0, 3).map((p, i) => (
                     <div key={i} className="w-8 h-8 rounded-full bg-accent border-2 border-white flex items-center justify-center text-[10px] text-white font-bold uppercase">
                       {p.userName?.charAt(0)}
                     </div>
                   ))}
-                  {participants.length > 3 && (
+                  {activeParticipants.length > 3 && (
                     <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-[10px] text-gray-500 font-bold">
-                      +{participants.length - 3}
+                      +{activeParticipants.length - 3}
                     </div>
                   )}
                 </div>
