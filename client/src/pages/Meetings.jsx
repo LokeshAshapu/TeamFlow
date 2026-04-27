@@ -16,7 +16,11 @@ import {
   ChevronRight,
   MessageSquare,
   ShieldCheck,
-  Settings
+  Settings,
+  WifiOff,
+  RefreshCw,
+  LogOut,
+  AlertCircle
 } from 'lucide-react';
 
 const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) => {
@@ -80,7 +84,8 @@ const Meetings = () => {
     isJoined,
     participants,
     activeParticipants,
-    isMeetingActive
+    isMeetingActive,
+    connectionStatus
   } = useWebRTC(roomId, profile?.id, profile?.full_name);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -192,6 +197,40 @@ const Meetings = () => {
         </div>
       ) : (
         <div className="flex-1 flex gap-6 min-h-0 relative">
+          {/* Connection Status Overlay */}
+          {(connectionStatus === 'error' || connectionStatus === 'disconnected') && (
+            <div className="absolute inset-0 z-[100] flex items-center justify-center bg-secondary/80 backdrop-blur-md animate-fade-in p-6">
+              <div className="bg-white rounded-[32px] shadow-2xl max-w-md w-full p-8 flex flex-col items-center text-center animate-scale-in">
+                <div className="w-20 h-20 rounded-3xl bg-red-50 text-red-500 flex items-center justify-center mb-6 shadow-inner">
+                  <WifiOff size={40} />
+                </div>
+                
+                <h2 className="text-2xl font-black text-secondary mb-3">Connection Lost</h2>
+                <p className="text-gray-500 font-medium mb-8">
+                  We've lost connection to the meeting server. This could be due to a temporary network issue.
+                </p>
+                
+                <div className="flex flex-col w-full gap-3">
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="w-full py-4 bg-primary text-white rounded-2xl font-bold flex items-center justify-center gap-2 shadow-xl shadow-blue-500/30 hover:scale-[1.02] active:scale-95 transition-all"
+                  >
+                    <RefreshCw size={20} className="animate-spin-slow" />
+                    Rejoin Meeting
+                  </button>
+                  
+                  <button 
+                    onClick={() => window.location.href = '/dashboard'}
+                    className="w-full py-4 bg-gray-50 text-gray-500 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-100 transition-all"
+                  >
+                    <LogOut size={20} />
+                    Leave for Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 flex flex-col min-h-0">
             <div className={`flex-1 grid gap-6 overflow-y-auto p-1 scroll-smooth ${
               participants.length <= 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full' : 

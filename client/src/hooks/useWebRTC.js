@@ -6,6 +6,7 @@ export const useWebRTC = (roomId, userId, userName) => {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
   const channelRef = useRef(null);
   const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
   const sessionId = useRef(Math.random().toString(36).substring(7)).current;
@@ -107,7 +108,7 @@ export const useWebRTC = (roomId, userId, userName) => {
         const state = channel.presenceState();
         console.log('Presence Sync State:', state);
         
-        // Convert presence state to list of participant info
+        // Convert presence state to list of participant info and uniqueify by userId
         const allUsers = Object.values(state).flat().map(p => ({
           sessionId: p.presence_ref,
           userId: p.userId,
@@ -115,7 +116,17 @@ export const useWebRTC = (roomId, userId, userName) => {
           isStreaming: p.isStreaming,
           joinedAt: p.joinedAt
         }));
-        setParticipants(allUsers);
+
+        const uniqueUsers = Array.from(allUsers.reduce((map, p) => {
+          const existing = map.get(p.userId);
+          // Prefer streaming session or more recent join
+          if (!existing || p.isStreaming || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+            map.set(p.userId, p);
+          }
+          return map;
+        }, new Map()).values());
+
+        setParticipants(uniqueUsers);
 
         // Only create peer connections for users who are actually streaming
         Object.values(state).flat().forEach(p => {
@@ -128,10 +139,10 @@ export const useWebRTC = (roomId, userId, userName) => {
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         console.log('User joined presence:', key, newPresences);
         setParticipants(prev => {
-          const next = [...prev];
+          const all = [...prev];
           newPresences.forEach(p => {
-            if (!next.find(x => x.sessionId === p.presence_ref)) {
-              next.push({
+            if (!all.find(x => x.sessionId === p.presence_ref)) {
+              all.push({
                 sessionId: p.presence_ref,
                 userId: p.userId,
                 userName: p.userName,
@@ -140,7 +151,15 @@ export const useWebRTC = (roomId, userId, userName) => {
               });
             }
           });
-          return next;
+
+          // Uniqueify
+          return Array.from(all.reduce((map, p) => {
+            const existing = map.get(p.userId);
+            if (!existing || p.isStreaming || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+              map.set(p.userId, p);
+            }
+            return map;
+          }, new Map()).values());
         });
         
         // If a newly joined user is already streaming, connect to them
@@ -209,7 +228,9 @@ export const useWebRTC = (roomId, userId, userName) => {
         }
       })
       .subscribe(async (status) => {
+        console.log('Channel subscription status:', status);
         if (status === 'SUBSCRIBED') {
+          setConnectionStatus('connected');
           console.log('Successfully subscribed to channel');
           // Track immediately as NOT streaming
           await channel.track({ 
@@ -218,6 +239,10 @@ export const useWebRTC = (roomId, userId, userName) => {
             isStreaming: false,
             joinedAt: new Date().toISOString() 
           });
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('error');
+        } else if (status === 'CLOSED') {
+          setConnectionStatus('disconnected');
         }
       });
 
@@ -304,6 +329,7 @@ export const useWebRTC = (roomId, userId, userName) => {
     isJoined,
     participants,
     activeParticipants: participants.filter(p => p.isStreaming),
-    isMeetingActive: participants.some(p => p.isStreaming)
+    isMeetingActive: participants.some(p => p.isStreaming),
+    connectionStatus
   };
 };
