@@ -9,8 +9,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // In production, restrict this to your frontend URL
-    methods: ["GET", "POST"]
+    origin: ["http://localhost:5173", "http://localhost:5174", "https://team-flow-a3l5.vercel.app"],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 

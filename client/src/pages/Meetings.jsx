@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useWebRTC } from '../hooks/useWebRTC';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { 
   Video, 
   VideoOff, 
@@ -9,7 +10,8 @@ import {
   Monitor, 
   PhoneOff, 
   Users,
-  Maximize2
+  Maximize2,
+  LayoutGrid
 } from 'lucide-react';
 
 const VideoFeed = ({ stream, label, isLocal }) => {
@@ -40,6 +42,11 @@ const VideoFeed = ({ stream, label, isLocal }) => {
 
 const Meetings = () => {
   const { profile } = useAuth();
+  const [team, setTeam] = useState(null);
+  
+  // Use a stable room ID once profile is loaded
+  const roomId = profile?.team_id ? `team-${profile.team_id}` : (profile ? 'general-meeting' : null);
+  
   const { 
     localStream, 
     remoteStreams, 
@@ -48,10 +55,21 @@ const Meetings = () => {
     toggleAudio, 
     startScreenShare,
     isJoined 
-  } = useWebRTC('general-meeting', profile?.id, profile?.full_name);
+  } = useWebRTC(roomId, profile?.id, profile?.full_name);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
+
+  useEffect(() => {
+    if (profile?.team_id) {
+      fetchTeam();
+    }
+  }, [profile]);
+
+  const fetchTeam = async () => {
+    const { data } = await supabase.from('teams').select('name').eq('id', profile.team_id).single();
+    if (data) setTeam(data);
+  };
 
   const handleToggleVideo = () => {
     toggleVideo();
@@ -68,9 +86,18 @@ const Meetings = () => {
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6 animate-slide-in">
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-secondary">Meeting Room</h1>
-          <p className="text-gray-500 font-medium">Channel: Team General</p>
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-primary flex items-center justify-center shadow-inner">
+            <LayoutGrid size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-secondary">Meeting Room</h1>
+            <p className="text-gray-500 font-medium flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-accent"></span>
+              Channel: {team ? `${team.name} Team` : 'General Public'}
+              <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded text-gray-400 font-mono ml-2">Room: {roomId}</span>
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-xl border border-gray-100 shadow-sm">
           <div className="flex items-center gap-2">
@@ -94,7 +121,7 @@ const Meetings = () => {
           </div>
           <h2 className="text-2xl font-bold mb-2">Ready to join?</h2>
           <p className="text-gray-400 mb-8 max-w-xs text-center text-sm font-medium">
-            Test your camera and microphone before jumping into the conversation.
+            Join the {team ? team.name : 'General'} meeting and start collaborating with your team.
           </p>
           <button 
             onClick={startStream}
