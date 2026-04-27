@@ -11,10 +11,15 @@ import {
   PhoneOff, 
   Users,
   Maximize2,
-  LayoutGrid
+  LayoutGrid,
+  X,
+  ChevronRight,
+  MessageSquare,
+  ShieldCheck,
+  Settings
 } from 'lucide-react';
 
-const VideoFeed = ({ stream, label, isLocal }) => {
+const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) => {
   const videoRef = useRef();
 
   useEffect(() => {
@@ -23,19 +28,37 @@ const VideoFeed = ({ stream, label, isLocal }) => {
     }
   }, [stream]);
 
+  const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
+
   return (
-    <div className="relative bg-secondary rounded-2xl overflow-hidden shadow-xl aspect-video group animate-fade-in">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={isLocal}
-        className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
-      />
-      <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-lg text-white text-sm font-medium">
-        <div className={`w-2 h-2 rounded-full ${isLocal ? 'bg-primary' : 'bg-accent animate-pulse'}`}></div>
-        {label} {isLocal && '(You)'}
+    <div className="relative bg-secondary/95 rounded-2xl overflow-hidden shadow-2xl aspect-video group animate-fade-in ring-1 ring-white/10">
+      {isStreaming ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={isLocal}
+          className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-secondary to-slate-900">
+          <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/30 shadow-lg mb-2">
+            {initials}
+          </div>
+          <span className="text-white/40 text-sm font-medium">{name}</span>
+        </div>
+      )}
+      
+      <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/40 backdrop-blur-xl rounded-xl border border-white/10 text-white text-xs font-semibold">
+        <div className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-accent animate-pulse' : 'bg-gray-500'}`}></div>
+        {name} {isLocal && '(You)'}
       </div>
+
+      {isLocal && (
+        <div className="absolute top-4 right-4 p-2 bg-black/40 backdrop-blur-xl rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <ShieldCheck size={14} className="text-primary" />
+        </div>
+      )}
     </div>
   );
 };
@@ -62,6 +85,7 @@ const Meetings = () => {
 
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
+  const [showParticipants, setShowParticipants] = useState(false);
 
   useEffect(() => {
     if (profile?.team_id) {
@@ -167,55 +191,145 @@ const Meetings = () => {
           </button>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0">
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto p-1 scroll-smooth">
-            <VideoFeed 
-              stream={localStream} 
-              label={profile?.full_name} 
-              isLocal={true} 
-            />
-            {Object.entries(remoteStreams).map(([socketId, stream]) => (
-              <VideoFeed 
-                key={socketId} 
-                stream={stream} 
-                label={`Member ${socketId.substring(0, 4)}`} 
+        <div className="flex-1 flex gap-6 min-h-0 relative">
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className={`flex-1 grid gap-6 overflow-y-auto p-1 scroll-smooth ${
+              participants.length <= 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full' : 
+              participants.length <= 4 ? 'grid-cols-1 md:grid-cols-2' : 
+              'grid-cols-2 lg:grid-cols-3'
+            }`}>
+              {/* Local Participant */}
+              <ParticipantTile 
+                stream={localStream} 
+                name={profile?.full_name} 
+                isLocal={true} 
+                isStreaming={isJoined}
+                participantId={profile?.id}
               />
-            ))}
-          </div>
 
-          <div className="mt-8 flex items-center justify-center gap-6 py-6 bg-secondary/5 backdrop-blur-sm rounded-3xl border border-gray-100 shadow-sm">
-            <div className="flex items-center gap-4">
-              <button 
-                onClick={handleToggleAudio}
-                className={`p-4 rounded-2xl transition-all shadow-lg ${isMicOn ? 'bg-white text-secondary hover:bg-gray-100' : 'bg-red-500 text-white shadow-red-500/20'}`}
-              >
-                {isMicOn ? <Mic size={24} /> : <MicOff size={24} />}
-              </button>
-              
-              <button 
-                onClick={handleToggleVideo}
-                className={`p-4 rounded-2xl transition-all shadow-lg ${isVideoOn ? 'bg-white text-secondary hover:bg-gray-100' : 'bg-red-500 text-white shadow-red-500/20'}`}
-              >
-                {isVideoOn ? <Video size={24} /> : <VideoOff size={24} />}
-              </button>
-
-              <button 
-                onClick={startScreenShare}
-                className="p-4 bg-white text-secondary hover:bg-gray-100 rounded-2xl transition-all shadow-lg"
-              >
-                <Monitor size={24} />
-              </button>
+              {/* Remote Participants */}
+              {participants.filter(p => p.userId !== profile?.id).map((p) => (
+                <ParticipantTile 
+                  key={p.sessionId}
+                  stream={remoteStreams[p.sessionId]} 
+                  name={p.userName} 
+                  isLocal={false}
+                  isStreaming={p.isStreaming}
+                  participantId={p.userId}
+                />
+              ))}
             </div>
 
-            <div className="w-px h-10 bg-gray-200"></div>
+            {/* Controls Bar */}
+            <div className="mt-6 flex items-center justify-center gap-4 py-4 px-6 bg-white border border-gray-100 rounded-3xl shadow-xl shadow-gray-200/50">
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={handleToggleAudio}
+                  className={`p-3.5 rounded-2xl transition-all ${isMicOn ? 'bg-gray-50 text-secondary hover:bg-gray-100' : 'bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/20'}`}
+                  title={isMicOn ? 'Mute' : 'Unmute'}
+                >
+                  {isMicOn ? <Mic size={22} /> : <MicOff size={22} />}
+                </button>
+                
+                <button 
+                  onClick={handleToggleVideo}
+                  className={`p-3.5 rounded-2xl transition-all ${isVideoOn ? 'bg-gray-50 text-secondary hover:bg-gray-100' : 'bg-red-500 text-white hover:bg-red-600 shadow-lg shadow-red-500/20'}`}
+                  title={isVideoOn ? 'Stop Video' : 'Start Video'}
+                >
+                  {isVideoOn ? <Video size={22} /> : <VideoOff size={22} />}
+                </button>
+              </div>
 
-            <button 
-              onClick={handleLeave}
-              className="p-4 bg-red-500 text-white rounded-2xl hover:bg-red-600 shadow-xl shadow-red-500/30 transition-all hover:scale-105"
-            >
-              <PhoneOff size={24} />
-            </button>
+              <div className="w-px h-8 bg-gray-200 mx-2"></div>
+
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={startScreenShare}
+                  className="p-3.5 bg-gray-50 text-secondary hover:bg-gray-100 rounded-2xl transition-all"
+                  title="Share Screen"
+                >
+                  <Monitor size={22} />
+                </button>
+                
+                <button 
+                  onClick={() => setShowParticipants(!showParticipants)}
+                  className={`p-3.5 rounded-2xl transition-all ${showParticipants ? 'bg-primary/10 text-primary' : 'bg-gray-50 text-secondary hover:bg-gray-100'}`}
+                  title="Participants"
+                >
+                  <Users size={22} />
+                </button>
+
+                <button 
+                  className="p-3.5 bg-gray-50 text-secondary hover:bg-gray-100 rounded-2xl transition-all"
+                  title="Chat (Coming Soon)"
+                >
+                  <MessageSquare size={22} />
+                </button>
+              </div>
+
+              <div className="w-px h-8 bg-gray-200 mx-2"></div>
+
+              <button 
+                onClick={handleLeave}
+                className="px-6 py-3.5 bg-red-500 text-white rounded-2xl hover:bg-red-600 shadow-lg shadow-red-500/30 transition-all font-bold flex items-center gap-2 hover:scale-105 active:scale-95"
+              >
+                <PhoneOff size={20} />
+                <span className="hidden sm:inline">End Meeting</span>
+              </button>
+            </div>
           </div>
+
+          {/* Participants Sidebar */}
+          {showParticipants && (
+            <div className="w-80 bg-white rounded-3xl border border-gray-100 shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+              <div className="p-6 border-b border-gray-50 flex items-center justify-between">
+                <h3 className="font-bold text-secondary flex items-center gap-2">
+                  Participants
+                  <span className="bg-gray-100 text-gray-500 text-[10px] px-2 py-0.5 rounded-full">{participants.length}</span>
+                </h3>
+                <button 
+                  onClick={() => setShowParticipants(false)}
+                  className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-400"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {participants.map((p) => (
+                  <div key={p.sessionId} className="flex items-center justify-between p-3 rounded-2xl hover:bg-gray-50 transition-colors group">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center text-primary font-bold text-sm border border-blue-100 shadow-sm">
+                        {p.userName?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-secondary">
+                          {p.userName} {p.userId === profile?.id && '(You)'}
+                        </span>
+                        <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                          {p.isStreaming ? (
+                            <><Video size={10} className="text-accent" /> Active</>
+                          ) : (
+                            <><VideoOff size={10} /> Camera Off</>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                    {p.userId === profile?.id && (
+                      <ShieldCheck size={14} className="text-primary opacity-50" />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="p-4 bg-gray-50/50 border-t border-gray-50">
+                <button className="w-full py-3 bg-white border border-gray-100 text-gray-500 text-sm font-bold rounded-2xl hover:bg-gray-100 transition-colors flex items-center justify-center gap-2">
+                  <Users size={16} />
+                  Invite Others
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
