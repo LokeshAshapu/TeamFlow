@@ -12,7 +12,9 @@ import {
   Video,
   Bell,
   MoreVertical,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -29,6 +31,7 @@ const Calendar = () => {
     start_time: '',
     end_time: ''
   });
+  const [editingMeeting, setEditingMeeting] = useState(null);
 
   useEffect(() => {
     if (profile) {
@@ -87,7 +90,8 @@ const Calendar = () => {
           date: new Date(m.start_time),
           endTime: m.end_time ? new Date(m.end_time) : null,
           type: 'meeting',
-          description: m.description
+          description: m.description,
+          created_by: m.created_by
         }))
       ];
 
@@ -102,22 +106,61 @@ const Calendar = () => {
   const handleCreateMeeting = async (e) => {
     e.preventDefault();
     try {
-      const { error } = await supabase.from('scheduled_meetings').insert([{
+      const meetingData = {
         title: newMeeting.title,
         description: newMeeting.description,
         start_time: new Date(`${selectedDate.toDateString()} ${newMeeting.start_time}`).toISOString(),
         end_time: newMeeting.end_time ? new Date(`${selectedDate.toDateString()} ${newMeeting.end_time}`).toISOString() : null,
         team_id: profile.team_id,
         created_by: profile.id
-      }]);
+      };
 
-      if (error) throw error;
+      if (editingMeeting) {
+        const { error } = await supabase
+          .from('scheduled_meetings')
+          .update(meetingData)
+          .eq('id', editingMeeting.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('scheduled_meetings')
+          .insert([meetingData]);
+        if (error) throw error;
+      }
+
       setShowModal(false);
+      setEditingMeeting(null);
       fetchEvents();
       setNewMeeting({ title: '', description: '', start_time: '', end_time: '' });
     } catch (error) {
       alert(error.message);
     }
+  };
+
+  const handleDeleteMeeting = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this meeting?')) return;
+    try {
+      const { error } = await supabase
+        .from('scheduled_meetings')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      fetchEvents();
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+  const openEditModal = (meeting) => {
+    setEditingMeeting(meeting);
+    setNewMeeting({
+      title: meeting.title,
+      description: meeting.description || '',
+      start_time: meeting.date.getHours().toString().padStart(2, '0') + ':' + meeting.date.getMinutes().toString().padStart(2, '0'),
+      end_time: meeting.endTime ? meeting.endTime.getHours().toString().padStart(2, '0') + ':' + meeting.endTime.getMinutes().toString().padStart(2, '0') : ''
+    });
+    setSelectedDate(meeting.date);
+    setShowModal(true);
   };
 
   // Calendar Helpers
@@ -253,8 +296,28 @@ const Calendar = () => {
                     }`}
                   >
                     <div className="flex items-start justify-between mb-3">
-                      <div className={`p-2 rounded-xl ${e.type === 'meeting' ? 'bg-purple-600 text-white' : 'bg-primary text-white'}`}>
-                        {e.type === 'meeting' ? <Video size={16} /> : <CheckSquare size={16} />}
+                      <div className="flex gap-2">
+                        <div className={`p-2 rounded-xl ${e.type === 'meeting' ? 'bg-purple-600 text-white' : 'bg-primary text-white'}`}>
+                          {e.type === 'meeting' ? <Video size={16} /> : <CheckSquare size={16} />}
+                        </div>
+                        {e.type === 'meeting' && (isAdmin || isLead || e.created_by === profile.id) && (
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={() => openEditModal(e)}
+                              className="p-1.5 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors"
+                              title="Edit Meeting"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteMeeting(e.id)}
+                              className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
+                              title="Delete Meeting"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
                         {e.type === 'meeting' ? 'Meeting' : 'Task'}
@@ -315,11 +378,15 @@ const Calendar = () => {
                       <Video size={24} />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-black text-secondary">Schedule Meeting</h2>
+                      <h2 className="text-2xl font-black text-secondary">{editingMeeting ? 'Edit Meeting' : 'Schedule Meeting'}</h2>
                       <p className="text-sm text-gray-500 font-medium">For {selectedDate.toDateString()}</p>
                     </div>
                   </div>
-                  <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-100 rounded-xl transition-all text-gray-400">
+                  <button onClick={() => {
+                    setShowModal(false);
+                    setEditingMeeting(null);
+                    setNewMeeting({ title: '', description: '', start_time: '', end_time: '' });
+                  }} className="p-2 hover:bg-gray-100 rounded-xl transition-all text-gray-400">
                     <X size={20} />
                   </button>
                 </div>
@@ -370,8 +437,14 @@ const Calendar = () => {
                   </div>
 
                   <div className="flex gap-4 pt-4">
-                    <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 px-6 bg-gray-100 hover:bg-gray-200 text-secondary font-bold rounded-2xl transition-all">Cancel</button>
-                    <button type="submit" className="flex-1 py-4 px-6 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl shadow-xl shadow-purple-500/20 transition-all">Schedule Meeting</button>
+                    <button type="button" onClick={() => {
+                      setShowModal(false);
+                      setEditingMeeting(null);
+                      setNewMeeting({ title: '', description: '', start_time: '', end_time: '' });
+                    }} className="flex-1 py-4 px-6 bg-gray-100 hover:bg-gray-200 text-secondary font-bold rounded-2xl transition-all">Cancel</button>
+                    <button type="submit" className="flex-1 py-4 px-6 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl shadow-xl shadow-purple-500/20 transition-all">
+                      {editingMeeting ? 'Update Meeting' : 'Schedule Meeting'}
+                    </button>
                   </div>
                 </form>
               </div>
