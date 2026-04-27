@@ -119,9 +119,17 @@ export const useWebRTC = (roomId, userId, userName) => {
 
         const uniqueUsers = Array.from(allUsers.reduce((map, p) => {
           const existing = map.get(p.userId);
-          // Prefer streaming session or more recent join
-          if (!existing || p.isStreaming || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+          if (!existing) {
             map.set(p.userId, p);
+          } else {
+            // Priority: isStreaming > most recent joinedAt
+            if (p.isStreaming && !existing.isStreaming) {
+              map.set(p.userId, p);
+            } else if (p.isStreaming === existing.isStreaming) {
+              if (new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+                map.set(p.userId, p);
+              }
+            }
           }
           return map;
         }, new Map()).values());
@@ -152,11 +160,20 @@ export const useWebRTC = (roomId, userId, userName) => {
             }
           });
 
-          // Uniqueify
+          // Uniqueify by userId to prevent ghost sessions
           return Array.from(all.reduce((map, p) => {
             const existing = map.get(p.userId);
-            if (!existing || p.isStreaming || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+            if (!existing) {
               map.set(p.userId, p);
+            } else {
+              // Priority: isStreaming > most recent joinedAt
+              if (p.isStreaming && !existing.isStreaming) {
+                map.set(p.userId, p);
+              } else if (p.isStreaming === existing.isStreaming) {
+                if (new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+                  map.set(p.userId, p);
+                }
+              }
             }
             return map;
           }, new Map()).values());

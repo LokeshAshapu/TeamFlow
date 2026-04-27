@@ -119,7 +119,7 @@ const Meetings = () => {
     window.location.reload();
   };
 
-  const participantCount = activeParticipants.length;
+  const participantCount = participants.length;
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6 animate-slide-in">
