@@ -9,6 +9,7 @@ import Meetings from './pages/Meetings';
 import Chat from './pages/Chat';
 import TeamManagement from './pages/TeamManagement';
 import Profile from './pages/Profile';
+import Calendar from './pages/Calendar';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -50,6 +51,8 @@ function App() {
               </AdminRoute>
             } />
             <Route path="profile" element={<Profile />} />
+            <Route path="calendar" element={<Calendar />} />
+            <Route path="profile/:userId" element={<Profile />} />
             <Route path="profile/:userId" element={<Profile />} />
           </Route>
         </Routes>

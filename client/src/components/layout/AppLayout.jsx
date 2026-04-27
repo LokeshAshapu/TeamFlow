@@ -1,8 +1,12 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useNotifications } from '../../hooks/useNotifications';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AppLayout = () => {
+  const { profile } = useAuth();
+  useNotifications(profile);
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />

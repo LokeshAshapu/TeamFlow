@@ -106,7 +106,7 @@ const Dashboard = () => {
           <p className="text-gray-500">Here's the real-time status of your projects.</p>
         </div>
         <button 
-          onClick={() => navigate('/meetings')}
+          onClick={() => navigate('/calendar')}
           className="btn-primary"
         >
           <Calendar size={18} />

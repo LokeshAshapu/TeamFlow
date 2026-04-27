@@ -12,7 +12,8 @@ import {
   User,
   Zap,
   Menu,
-  X
+  X,
+  Calendar as CalendarIcon
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -23,6 +24,7 @@ const Sidebar = () => {
   const navItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/' },
     { name: 'Tasks', icon: CheckSquare, path: '/tasks' },
+    { name: 'Schedule', icon: CalendarIcon, path: '/calendar' },
     { name: 'Meetings', icon: Video, path: '/meetings' },
     { name: 'Team Chat', icon: MessageSquare, path: '/chat' },
     { name: 'My Profile', icon: User, path: '/profile' },
