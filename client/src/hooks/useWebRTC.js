@@ -7,7 +7,11 @@ export const useWebRTC = (roomId, userId, userName) => {
   const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    // Load from session storage for the specific room
+    const saved = sessionStorage.getItem(`chat-${roomId}`);
+    return saved ? JSON.parse(saved) : [];
+  });
   const channelRef = useRef(null);
   const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
   const sessionId = useRef(Math.random().toString(36).substring(7)).current;
@@ -247,19 +251,57 @@ export const useWebRTC = (roomId, userId, userName) => {
       })
       .on('broadcast', { event: 'chat-message' }, ({ payload }) => {
         console.log('Received chat message:', payload);
-        setMessages(prev => [...prev, {
+        const newMessage = {
           id: Math.random().toString(36).substring(7),
           senderId: payload.senderId,
           senderName: payload.senderName,
           content: payload.content,
           timestamp: new Date().toISOString()
-        }]);
+        };
+        setMessages(prev => {
+          const next = [...prev, newMessage];
+          sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(next));
+          return next;
+        });
+      })
+      .on('broadcast', { event: 'history-request' }, ({ payload }) => {
+        // If we have messages, send them to the new joiner
+        if (messages.length > 0) {
+          console.log('Sending history to:', payload.from);
+          channel.send({
+            type: 'broadcast',
+            event: 'history-response',
+            payload: { to: payload.from, messages }
+          });
+        }
+      })
+      .on('broadcast', { event: 'history-response' }, ({ payload }) => {
+        // If the history is for us, and we don't have many messages yet
+        if (payload.to === sessionId) {
+          console.log('Received history sync');
+          setMessages(prev => {
+            // Merge and uniqueify by ID
+            const combined = [...prev, ...payload.messages];
+            const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
+            unique.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(unique));
+            return unique;
+          });
+        }
       })
       .subscribe(async (status) => {
         console.log('Channel subscription status:', status);
         if (status === 'SUBSCRIBED') {
           setConnectionStatus('connected');
           console.log('Successfully subscribed to channel');
+          
+          // Request history from others
+          channel.send({
+            type: 'broadcast',
+            event: 'history-request',
+            payload: { from: sessionId }
+          });
+
           // Track immediately as NOT streaming
           await channel.track({ 
             userId, 
@@ -402,11 +444,17 @@ export const useWebRTC = (roomId, userId, userName) => {
     });
 
     // Add to local state immediately
-    setMessages(prev => [...prev, {
+    const newMessage = {
       id: Math.random().toString(36).substring(7),
       ...message,
       timestamp: new Date().toISOString()
-    }]);
+    };
+
+    setMessages(prev => {
+      const next = [...prev, newMessage];
+      sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(next));
+      return next;
+    });
   };
 
   return {
