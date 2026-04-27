@@ -120,12 +120,22 @@ const Calendar = () => {
           .from('scheduled_meetings')
           .update(meetingData)
           .eq('id', editingMeeting.id);
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Update error:', error);
+          alert(`Update failed: ${error.message}`);
+          return;
+        }
       } else {
         const { error } = await supabase
           .from('scheduled_meetings')
           .insert([meetingData]);
-        if (error) throw error;
+        
+        if (error) {
+          console.error('Insert error:', error);
+          alert(`Schedule failed: ${error.message}`);
+          return;
+        }
       }
 
       setShowModal(false);
@@ -144,10 +154,17 @@ const Calendar = () => {
         .from('scheduled_meetings')
         .delete()
         .eq('id', id);
-      if (error) throw error;
+      
+      if (error) {
+        console.error('Delete error:', error);
+        alert(`Delete failed: ${error.message || 'Unknown error'}`);
+        return;
+      }
+      
       fetchEvents();
     } catch (error) {
-      alert(error.message);
+      console.error('Catch error:', error);
+      alert(`System error: ${error.message}`);
     }
   };
 
@@ -303,14 +320,20 @@ const Calendar = () => {
                         {e.type === 'meeting' && (isAdmin || isLead || e.created_by === profile.id) && (
                           <div className="flex gap-1">
                             <button 
-                              onClick={() => openEditModal(e)}
+                              onClick={(e_stop) => {
+                                e_stop.stopPropagation();
+                                openEditModal(e);
+                              }}
                               className="p-1.5 hover:bg-purple-100 text-purple-600 rounded-lg transition-colors"
                               title="Edit Meeting"
                             >
                               <Edit2 size={12} />
                             </button>
                             <button 
-                              onClick={() => handleDeleteMeeting(e.id)}
+                              onClick={(e_stop) => {
+                                e_stop.stopPropagation();
+                                handleDeleteMeeting(e.id);
+                              }}
                               className="p-1.5 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
                               title="Delete Meeting"
                             >
