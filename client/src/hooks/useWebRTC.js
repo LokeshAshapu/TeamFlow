@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 export const useWebRTC = (roomId, userId, userName) => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
+  const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
   const channelRef = useRef(null);
   const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
@@ -104,14 +105,43 @@ export const useWebRTC = (roomId, userId, userName) => {
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
+        console.log('Presence Sync State:', state);
+        
+        // Convert presence state to list of participant info
+        const allParticipants = Object.values(state).flat().map(p => ({
+          sessionId: p.presence_ref,
+          userId: p.userId,
+          userName: p.userName,
+          joinedAt: p.joinedAt
+        }));
+        setParticipants(allParticipants);
+
         Object.keys(state).forEach(peerId => {
           if (peerId !== sessionId) {
             createPeerConnection(peerId);
           }
         });
       })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        console.log('User joined presence:', key, newPresences);
+        setParticipants(prev => {
+          const next = [...prev];
+          newPresences.forEach(p => {
+            if (!next.find(x => x.sessionId === p.presence_ref)) {
+              next.push({
+                sessionId: p.presence_ref,
+                userId: p.userId,
+                userName: p.userName,
+                joinedAt: p.joinedAt
+              });
+            }
+          });
+          return next;
+        });
+      })
       .on('presence', { event: 'leave' }, ({ leftPresences }) => {
         leftPresences.forEach(p => handleUserLeft(p.presence_ref));
+        setParticipants(prev => prev.filter(p => !leftPresences.find(lp => lp.presence_ref === p.sessionId)));
       })
       .on('broadcast', { event: 'offer' }, async ({ payload }) => {
         if (payload.to !== sessionId) return;
@@ -169,7 +199,7 @@ export const useWebRTC = (roomId, userId, userName) => {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await channel.track({ userId, userName, joinedAt: new Date().toISOString() });
+          console.log('Successfully subscribed to channel');
         }
       });
 
@@ -191,6 +221,15 @@ export const useWebRTC = (roomId, userId, userName) => {
       Object.values(peersRef.current).forEach(({ pc }) => {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
       });
+      
+      // Start tracking presence ONLY after stream is started
+      if (channelRef.current) {
+        await channelRef.current.track({ 
+          userId, 
+          userName, 
+          joinedAt: new Date().toISOString() 
+        });
+      }
       
       setIsJoined(true);
     } catch (err) {
@@ -243,6 +282,8 @@ export const useWebRTC = (roomId, userId, userName) => {
     toggleVideo,
     toggleAudio,
     startScreenShare,
-    isJoined
+    isJoined,
+    participants,
+    isMeetingActive: participants.length > 0
   };
 };

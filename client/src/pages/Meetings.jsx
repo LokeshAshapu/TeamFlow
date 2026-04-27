@@ -54,7 +54,9 @@ const Meetings = () => {
     toggleVideo, 
     toggleAudio, 
     startScreenShare,
-    isJoined 
+    isJoined,
+    participants,
+    isMeetingActive
   } = useWebRTC(roomId, profile?.id, profile?.full_name);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -80,8 +82,14 @@ const Meetings = () => {
     toggleAudio();
     setIsMicOn(!isMicOn);
   };
+  
+  const handleLeave = () => {
+    // A simple reload is the most reliable way to clear all WebRTC states and presence
+    // but we can also navigate away or just reset state if we had a more complex router setup.
+    window.location.reload();
+  };
 
-  const participantCount = Object.keys(remoteStreams).length + (isJoined ? 1 : 0);
+  const participantCount = participants.length;
 
   return (
     <div className="h-[calc(100vh-8rem)] flex flex-col gap-6 animate-slide-in">
@@ -115,19 +123,46 @@ const Meetings = () => {
       </header>
 
       {!isJoined ? (
-        <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-gray-200">
-          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6 text-primary shadow-inner">
+        <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-3xl border border-dashed border-gray-200 p-8">
+          <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 shadow-inner transition-colors ${isMeetingActive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-primary'}`}>
             <Video size={40} />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Ready to join?</h2>
-          <p className="text-gray-400 mb-8 max-w-xs text-center text-sm font-medium">
-            Join the {team ? team.name : 'General'} meeting and start collaborating with your team.
-          </p>
+          
+          <h2 className="text-2xl font-bold mb-2">
+            {isMeetingActive ? 'Meeting in Progress' : 'Ready to start?'}
+          </h2>
+          
+          <div className="text-gray-400 mb-8 max-w-xs text-center">
+            {isMeetingActive ? (
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-sm font-medium">
+                  {participants.map(p => p.userName).join(', ')} {participants.length === 1 ? 'is' : 'are'} already in the meeting.
+                </p>
+                <div className="flex -space-x-2">
+                  {participants.slice(0, 3).map((p, i) => (
+                    <div key={i} className="w-8 h-8 rounded-full bg-accent border-2 border-white flex items-center justify-center text-[10px] text-white font-bold uppercase">
+                      {p.userName?.charAt(0)}
+                    </div>
+                  ))}
+                  {participants.length > 3 && (
+                    <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-[10px] text-gray-500 font-bold">
+                      +{participants.length - 3}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm font-medium">
+                Start a {team ? team.name : 'General'} meeting and start collaborating with your team.
+              </p>
+            )}
+          </div>
+
           <button 
             onClick={startStream}
-            className="btn-primary px-12 py-4 text-lg rounded-2xl shadow-xl shadow-blue-500/30 hover:scale-105 active:scale-95 transition-all"
+            className={`btn-primary px-12 py-4 text-lg rounded-2xl shadow-xl transition-all hover:scale-105 active:scale-95 ${isMeetingActive ? 'bg-green-600 shadow-green-500/30' : 'shadow-blue-500/30'}`}
           >
-            Start Session
+            {isMeetingActive ? 'Join Meeting' : 'Start Session'}
           </button>
         </div>
       ) : (
@@ -174,7 +209,7 @@ const Meetings = () => {
             <div className="w-px h-10 bg-gray-200"></div>
 
             <button 
-              onClick={() => window.location.reload()}
+              onClick={handleLeave}
               className="p-4 bg-red-500 text-white rounded-2xl hover:bg-red-600 shadow-xl shadow-red-500/30 transition-all hover:scale-105"
             >
               <PhoneOff size={24} />
