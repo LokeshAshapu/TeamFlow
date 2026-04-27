@@ -5,7 +5,7 @@ import {
   Send, Hash, Users, Search, MoreHorizontal, 
   Paperclip, Smile, User, ExternalLink, 
   MessageCircle, X, Image as ImageIcon, File as FileIcon,
-  ShieldCheck, Lock
+  ShieldCheck, Lock, ChevronLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
@@ -24,6 +24,7 @@ const Chat = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachment, setAttachment] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [mobileView, setMobileView] = useState('list'); // 'list' | 'chat'
   const socketRef = useRef();
   const scrollRef = useRef();
   const fileInputRef = useRef();
@@ -157,8 +158,10 @@ const Chat = () => {
   };
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-6 animate-slide-in">
-      <div className="w-80 flex flex-col gap-6">
+    <div className="h-[calc(100vh-12rem)] md:h-[calc(100vh-8rem)] flex gap-0 md:gap-6 animate-slide-in relative overflow-hidden">
+      <div className={`w-full md:w-80 flex flex-col gap-6 transition-all duration-300 ${
+        mobileView === 'chat' ? 'hidden md:flex' : 'flex'
+      }`}>
         <div className="card h-full flex flex-col p-0 overflow-hidden border-none shadow-xl bg-white/80 backdrop-blur-sm">
           <div className="p-6 border-b border-gray-100">
             <h2 className="text-xl font-bold text-secondary">Chat Channels</h2>
@@ -168,7 +171,10 @@ const Chat = () => {
             <div className="p-4 space-y-2">
               <span className="text-xs font-black text-gray-400 uppercase tracking-widest px-2">Public</span>
               <button 
-                onClick={() => setActiveChat({ id: 'general', type: 'channel', name: 'General Chat' })}
+                onClick={() => {
+                  setActiveChat({ id: 'general', type: 'channel', name: 'General Chat' });
+                  setMobileView('chat');
+                }}
                 className={`w-full flex items-center gap-3 p-3 rounded-2xl font-bold text-sm transition-all ${
                   activeChat.id === 'general' ? 'bg-primary text-white shadow-lg shadow-blue-500/20' : 'text-gray-500 hover:bg-gray-50'
                 }`}
@@ -180,7 +186,10 @@ const Chat = () => {
                 <>
                   <span className="text-xs font-black text-gray-400 uppercase tracking-widest px-2 pt-4 block">Restricted</span>
                   <button 
-                    onClick={() => setActiveChat({ id: 'management', type: 'channel', name: 'Management Chat' })}
+                    onClick={() => {
+                      setActiveChat({ id: 'management', type: 'channel', name: 'Management Chat' });
+                      setMobileView('chat');
+                    }}
                     className={`w-full flex items-center gap-3 p-3 rounded-2xl font-bold text-sm transition-all ${
                       activeChat.id === 'management' ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20' : 'text-purple-600 hover:bg-purple-50'
                     }`}
@@ -197,7 +206,10 @@ const Chat = () => {
                 {teamMembers.filter(m => m.id !== profile?.id).map(member => (
                   <button 
                     key={member.id} 
-                    onClick={() => setActiveChat({ id: member.id, type: 'dm', name: member.full_name, avatar: member.avatar_url })}
+                    onClick={() => {
+                      setActiveChat({ id: member.id, type: 'dm', name: member.full_name, avatar: member.avatar_url });
+                      setMobileView('chat');
+                    }}
                     className={`w-full flex items-center gap-3 p-3 rounded-2xl transition-all text-sm group ${
                       activeChat.id === member.id ? 'bg-blue-50 text-primary font-bold border border-blue-100' : 'text-gray-500 hover:bg-gray-50'
                     }`}
@@ -217,10 +229,18 @@ const Chat = () => {
         </div>
       </div>
 
-      <div className="flex-1 card p-0 flex flex-col overflow-hidden border-none shadow-2xl bg-white">
-        <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-white/50 backdrop-blur-md z-10">
+      <div className={`flex-1 card p-0 flex flex-col overflow-hidden border-none shadow-2xl bg-white transition-all duration-300 ${
+        mobileView === 'list' ? 'hidden md:flex' : 'flex'
+      }`}>
+        <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between bg-white/50 backdrop-blur-md z-10">
           <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-white font-bold shadow-lg ${
+            <button 
+              onClick={() => setMobileView('list')}
+              className="md:hidden p-2 -ml-2 text-gray-400 hover:text-primary transition-colors"
+            >
+              <ChevronLeft size={24} />
+            </button>
+            <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center text-white font-bold shadow-lg ${
               activeChat.id === 'management' ? 'bg-purple-600 shadow-purple-500/20' : (activeChat.type === 'channel' ? 'bg-primary shadow-blue-500/20' : 'bg-accent shadow-green-500/20')
             }`}>
               {activeChat.id === 'management' ? <ShieldCheck size={20} /> : (activeChat.type === 'channel' ? <Hash size={20} /> : (activeChat.avatar ? <img src={activeChat.avatar} className="w-full h-full object-cover rounded-2xl" /> : activeChat.name.charAt(0)))}
@@ -234,7 +254,7 @@ const Chat = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-gray-50/30">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-8 space-y-4 sm:space-y-8 bg-gray-50/30">
           {loading ? (
             <div className="flex justify-center py-20"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div></div>
           ) : messages.length > 0 ? messages.map((msg, idx) => {
@@ -306,8 +326,8 @@ const Chat = () => {
               type="text" 
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder={`Message ${activeChat.name}...`}
-              className="w-full bg-gray-50 border-none rounded-3xl py-4 pl-24 pr-16 focus:ring-4 focus:ring-primary/5 transition-all text-sm font-medium"
+              placeholder={`Message ${activeChat.name.split(' ')[0]}...`}
+              className="w-full bg-gray-50 border-none rounded-3xl py-4 pl-20 sm:pl-24 pr-16 focus:ring-4 focus:ring-primary/5 transition-all text-sm font-medium"
             />
             <div className="absolute right-2 top-1/2 -translate-y-1/2">
               <button type="submit" disabled={uploading} className={`w-12 h-12 rounded-2xl text-white shadow-xl transition-all flex items-center justify-center ${activeChat.id === 'management' ? 'bg-purple-600 shadow-purple-500/20' : 'bg-primary shadow-blue-500/20'}`}>

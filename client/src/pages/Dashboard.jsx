@@ -11,6 +11,7 @@ import {
   CheckSquare,
   AlertCircle
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const StatCard = ({ title, value, icon: Icon, color }) => (
   <div className="card hover:border-primary/50 transition-colors group">
@@ -28,6 +29,7 @@ const StatCard = ({ title, value, icon: Icon, color }) => (
 
 const Dashboard = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [activities, setActivities] = useState([]);
   const [stats, setStats] = useState({ active: 0, completed: 0, team: 0, progress: 0 });
@@ -103,7 +105,10 @@ const Dashboard = () => {
           <h1 className="text-2xl font-bold text-secondary">Welcome back, {profile?.full_name}!</h1>
           <p className="text-gray-500">Here's the real-time status of your projects.</p>
         </div>
-        <button className="btn-primary">
+        <button 
+          onClick={() => navigate('/meetings')}
+          className="btn-primary"
+        >
           <Calendar size={18} />
           Full Schedule
         </button>
@@ -121,7 +126,10 @@ const Dashboard = () => {
           <div className="card">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-lg font-bold">Recent Updates</h2>
-              <button className="text-primary hover:underline text-sm font-medium flex items-center gap-1">
+              <button 
+                onClick={() => navigate('/tasks')}
+                className="text-primary hover:underline text-sm font-medium flex items-center gap-1"
+              >
                 View All <ArrowRight size={14} />
               </button>
             </div>
