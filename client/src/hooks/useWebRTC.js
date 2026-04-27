@@ -122,30 +122,16 @@ export const useWebRTC = (roomId, userId, userName) => {
           joinedAt: p.joinedAt
         }));
 
-        const uniqueUsers = Array.from(allUsers.reduce((map, p) => {
-          const existing = map.get(p.userId);
-          if (!existing) {
-            map.set(p.userId, p);
-          } else {
-            // Priority: isStreaming > most recent joinedAt
-            if (p.isStreaming && !existing.isStreaming) {
-              map.set(p.userId, p);
-            } else if (p.isStreaming === existing.isStreaming) {
-              if (new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-                map.set(p.userId, p);
-              }
-            }
-          }
-          return map;
-        }, new Map()).values());
+        // No longer uniqueifying by userId to allow multiple devices
+        setParticipants(allUsers);
 
-        setParticipants(uniqueUsers);
-
-        // Only create peer connections for users who are actually streaming
-        Object.values(state).flat().forEach(p => {
+        // Create peer connections and handle negotiation for users who are streaming
+        Object.values(state).flat().forEach(async (p) => {
           const peerId = p.presence_ref;
           if (peerId !== sessionId && p.isStreaming) {
-            createPeerConnection(peerId);
+            const pc = await createPeerConnection(peerId);
+            // If the PC already existed but we just found out they are streaming, 
+            // the tracks might already be added, but negotiation will trigger if needed.
           }
         });
       })
@@ -164,24 +150,7 @@ export const useWebRTC = (roomId, userId, userName) => {
               });
             }
           });
-
-          // Uniqueify by userId to prevent ghost sessions
-          return Array.from(all.reduce((map, p) => {
-            const existing = map.get(p.userId);
-            if (!existing) {
-              map.set(p.userId, p);
-            } else {
-              // Priority: isStreaming > most recent joinedAt
-              if (p.isStreaming && !existing.isStreaming) {
-                map.set(p.userId, p);
-              } else if (p.isStreaming === existing.isStreaming) {
-                if (new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-                  map.set(p.userId, p);
-                }
-              }
-            }
-            return map;
-          }, new Map()).values());
+          return all;
         });
         
         // If a newly joined user is already streaming, connect to them
@@ -341,7 +310,8 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId, 
           userName, 
           isStreaming: true,
-          joinedAt: new Date().toISOString() 
+          joinedAt: new Date().toISOString(),
+          sessionId // Include sessionId in metadata for easier debugging
         });
       }
       
@@ -403,26 +373,31 @@ export const useWebRTC = (roomId, userId, userName) => {
 
   const stopScreenShare = async (screenTrack) => {
     try {
-      // Re-acquire camera stream if needed, or just revert to the original if we kept it
-      // For simplicity, let's just re-get the user media for camera
+      if (screenTrack) screenTrack.stop();
+      
+      // Re-acquire camera stream
       const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       const cameraTrack = cameraStream.getVideoTracks()[0];
 
       if (localStream) {
-        const currentTrack = localStream.getVideoTracks()[0];
-        if (currentTrack) {
-          localStream.removeTrack(currentTrack);
-          localStream.addTrack(cameraTrack);
-          setLocalStream(new MediaStream(localStream.getTracks()));
-        }
+        const currentTracks = localStream.getTracks();
+        currentTracks.forEach(t => {
+          if (t.kind === 'video') {
+            localStream.removeTrack(t);
+            t.stop();
+          }
+        });
+        localStream.addTrack(cameraTrack);
+        setLocalStream(new MediaStream(localStream.getTracks()));
       }
 
-      Object.values(peersRef.current).forEach(({ pc }) => {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) sender.replaceTrack(cameraTrack);
-      });
-
-      if (screenTrack) screenTrack.stop();
+      for (const { pc } of Object.values(peersRef.current)) {
+        const senders = pc.getSenders();
+        const videoSender = senders.find(s => s.track?.kind === 'video');
+        if (videoSender) {
+          await videoSender.replaceTrack(cameraTrack);
+        }
+      }
     } catch (err) {
       console.error('Failed to stop screen share', err);
     }
@@ -466,6 +441,7 @@ export const useWebRTC = (roomId, userId, userName) => {
     startScreenShare,
     isJoined,
     participants,
+    sessionId, // Export local sessionId
     activeParticipants: participants.filter(p => p.isStreaming),
     isMeetingActive: participants.some(p => p.isStreaming),
     connectionStatus,

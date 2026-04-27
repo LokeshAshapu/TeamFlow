@@ -85,6 +85,7 @@ const Meetings = () => {
     startScreenShare,
     isJoined,
     participants,
+    sessionId,
     activeParticipants,
     isMeetingActive,
     connectionStatus,
@@ -269,7 +270,7 @@ const Meetings = () => {
               />
 
               {/* Remote Participants */}
-              {participants.filter(p => p.userId !== profile?.id).map((p) => (
+              {participants.filter(p => p.sessionId !== sessionId).map((p) => (
                 <ParticipantTile 
                   key={p.sessionId}
                   stream={remoteStreams[p.sessionId]} 
