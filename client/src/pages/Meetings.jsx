@@ -25,7 +25,7 @@ import {
   User
 } from 'lucide-react';
 
-const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId, isPinned, isScreenSharing, onPin }) => {
+const ParticipantTile = ({ stream, name, isLocal, isStreaming, isVideoOn, participantId, isPinned, isScreenSharing, onPin }) => {
   const videoRef = useRef();
 
   useEffect(() => {
@@ -38,7 +38,7 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId, is
 
   return (
     <div className={`relative bg-secondary/95 rounded-2xl overflow-hidden shadow-2xl group animate-fade-in ring-1 ring-white/10 ${isPinned ? 'w-full h-full' : 'aspect-video'}`}>
-      {isStreaming ? (
+      {isStreaming && (isVideoOn || isScreenSharing) ? (
         <video
           ref={videoRef}
           autoPlay
@@ -156,9 +156,9 @@ const Meetings = () => {
     if (data) setTeam(data);
   };
 
-  const handleToggleVideo = () => {
-    toggleVideo();
-    setIsVideoOn(!isVideoOn);
+  const handleToggleVideo = async () => {
+    const newState = await toggleVideo();
+    setIsVideoOn(newState);
   };
 
   const handleToggleAudio = () => {
@@ -291,6 +291,7 @@ const Meetings = () => {
                 userId: profile?.id,
                 userName: profile?.full_name,
                 isStreaming: isJoined,
+                isVideoOn,
                 isScreenSharing: localIsScreenSharing
               };
               const streamToUse = pinnedParticipant.sessionId === sessionId ? localStream : remoteStreams[pinnedParticipant.sessionId];
@@ -304,6 +305,7 @@ const Meetings = () => {
                       name={pinnedParticipant.userName}
                       isLocal={pinnedParticipant.sessionId === sessionId}
                       isStreaming={pinnedParticipant.isStreaming}
+                      isVideoOn={pinnedParticipant.isVideoOn !== false}
                       isScreenSharing={pinnedParticipant.isScreenSharing}
                       participantId={pinnedParticipant.userId}
                       isPinned={true}
@@ -320,6 +322,7 @@ const Meetings = () => {
                           name={profile?.full_name}
                           isLocal={true}
                           isStreaming={isJoined}
+                          isVideoOn={isVideoOn}
                           isScreenSharing={localIsScreenSharing}
                           participantId={profile?.id}
                           isPinned={false}
@@ -334,6 +337,7 @@ const Meetings = () => {
                           name={p.userName}
                           isLocal={false}
                           isStreaming={p.isStreaming}
+                          isVideoOn={p.isVideoOn !== false}
                           isScreenSharing={p.isScreenSharing}
                           participantId={p.userId}
                           isPinned={false}
@@ -357,6 +361,7 @@ const Meetings = () => {
                   name={profile?.full_name} 
                   isLocal={true} 
                   isStreaming={isJoined}
+                  isVideoOn={isVideoOn}
                   isScreenSharing={localIsScreenSharing}
                   participantId={profile?.id}
                   onPin={() => handlePin(sessionId)}
@@ -370,6 +375,7 @@ const Meetings = () => {
                     name={p.userName} 
                     isLocal={false}
                     isStreaming={p.isStreaming}
+                    isVideoOn={p.isVideoOn !== false}
                     isScreenSharing={p.isScreenSharing}
                     participantId={p.userId}
                     onPin={() => handlePin(p.sessionId)}

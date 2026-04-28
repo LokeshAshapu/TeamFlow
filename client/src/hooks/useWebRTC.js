@@ -120,6 +120,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId: p.userId,
           userName: p.userName,
           isStreaming: p.isStreaming,
+          isVideoOn: p.isVideoOn !== false, // default to true if missing
           isScreenSharing: p.isScreenSharing || false,
           joinedAt: p.joinedAt
         }));
@@ -148,6 +149,7 @@ export const useWebRTC = (roomId, userId, userName) => {
                 userId: p.userId,
                 userName: p.userName,
                 isStreaming: p.isStreaming,
+                isVideoOn: p.isVideoOn !== false,
                 isScreenSharing: p.isScreenSharing || false,
                 joinedAt: p.joinedAt
               });
@@ -279,6 +281,7 @@ export const useWebRTC = (roomId, userId, userName) => {
             userId, 
             userName, 
             isStreaming: false,
+            isVideoOn: false,
             isScreenSharing: false,
             joinedAt: new Date().toISOString() 
           });
@@ -314,6 +317,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId, 
           userName, 
           isStreaming: true,
+          isVideoOn: true,
           isScreenSharing: localIsScreenSharing,
           joinedAt: new Date().toISOString(),
           sessionId // Include sessionId in metadata for easier debugging
@@ -326,11 +330,27 @@ export const useWebRTC = (roomId, userId, userName) => {
     }
   };
 
-  const toggleVideo = () => {
+  const toggleVideo = async () => {
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0];
-      videoTrack.enabled = !videoTrack.enabled;
+      const newEnabledState = !videoTrack.enabled;
+      videoTrack.enabled = newEnabledState;
+      
+      if (channelRef.current) {
+        await channelRef.current.track({
+          ...channelRef.current.presenceState()[sessionId]?.[0],
+          userId,
+          userName,
+          isStreaming: true,
+          isVideoOn: newEnabledState,
+          isScreenSharing: localIsScreenSharing,
+          joinedAt: new Date().toISOString(),
+          sessionId
+        });
+      }
+      return newEnabledState;
     }
+    return false;
   };
 
   const toggleAudio = () => {
@@ -372,6 +392,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId,
           userName,
           isStreaming: true,
+          isVideoOn: localStream ? localStream.getVideoTracks()[0]?.enabled : true,
           isScreenSharing: true,
           joinedAt: new Date().toISOString(),
           sessionId
@@ -422,6 +443,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId,
           userName,
           isStreaming: true,
+          isVideoOn: localStream ? localStream.getVideoTracks()[0]?.enabled : true,
           isScreenSharing: false,
           joinedAt: new Date().toISOString(),
           sessionId
