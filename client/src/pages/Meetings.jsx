@@ -25,7 +25,7 @@ import {
   User
 } from 'lucide-react';
 
-const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) => {
+const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId, isPinned, isScreenSharing, onPin }) => {
   const videoRef = useRef();
 
   useEffect(() => {
@@ -37,14 +37,14 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) 
   const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
 
   return (
-    <div className="relative bg-secondary/95 rounded-2xl overflow-hidden shadow-2xl aspect-video group animate-fade-in ring-1 ring-white/10">
+    <div className={`relative bg-secondary/95 rounded-2xl overflow-hidden shadow-2xl group animate-fade-in ring-1 ring-white/10 ${isPinned ? 'w-full h-full' : 'aspect-video'}`}>
       {isStreaming ? (
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted={isLocal}
-          className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
+          className={`w-full h-full ${isScreenSharing ? 'object-contain bg-black' : 'object-cover'} ${isLocal && !isScreenSharing ? 'scale-x-[-1]' : ''}`}
         />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-secondary to-slate-900">
@@ -58,13 +58,25 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, participantId }) 
       <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-1.5 bg-black/40 backdrop-blur-xl rounded-xl border border-white/10 text-white text-xs font-semibold">
         <div className={`w-2 h-2 rounded-full ${isStreaming ? 'bg-accent animate-pulse' : 'bg-gray-500'}`}></div>
         {name} {isLocal && '(You)'}
+        {isScreenSharing && <Monitor size={12} className="ml-1 text-accent" />}
       </div>
 
-      {isLocal && (
-        <div className="absolute top-4 right-4 p-2 bg-black/40 backdrop-blur-xl rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-          <ShieldCheck size={14} className="text-primary" />
-        </div>
-      )}
+      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onPin && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onPin(); }}
+            className={`p-2 backdrop-blur-xl rounded-lg border border-white/10 transition-colors ${isPinned ? 'bg-primary/80 text-white' : 'bg-black/40 text-gray-300 hover:text-white'}`}
+            title={isPinned ? "Unpin" : "Pin to main screen"}
+          >
+            <Maximize2 size={14} />
+          </button>
+        )}
+        {isLocal && (
+          <div className="p-2 bg-black/40 backdrop-blur-xl rounded-lg border border-white/10">
+            <ShieldCheck size={14} className="text-primary" />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -73,6 +85,8 @@ const Meetings = () => {
   const { profile } = useAuth();
   const [team, setTeam] = useState(null);
   
+  const [pinnedSessionId, setPinnedSessionId] = useState(null);
+
   // Use a stable room ID once profile is loaded
   const roomId = profile?.team_id ? `team-${profile.team_id}` : (profile ? 'general-meeting' : null);
   
@@ -83,15 +97,32 @@ const Meetings = () => {
     toggleVideo, 
     toggleAudio, 
     startScreenShare,
+    stopScreenShare,
     isJoined,
     participants,
     sessionId,
     activeParticipants,
     isMeetingActive,
+    localIsScreenSharing,
     connectionStatus,
     messages,
     sendMessage
   } = useWebRTC(roomId, profile?.id, profile?.full_name);
+
+  // Auto-pin screen sharer
+  useEffect(() => {
+    const sharer = participants.find(p => p.isScreenSharing);
+    if (sharer) {
+      setPinnedSessionId(sharer.sessionId);
+    } else if (pinnedSessionId) {
+      const stillExists = participants.find(p => p.sessionId === pinnedSessionId);
+      if (!stillExists) setPinnedSessionId(null);
+    }
+  }, [participants, pinnedSessionId]);
+
+  const handlePin = (id) => {
+    setPinnedSessionId(prev => prev === id ? null : id);
+  };
 
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
@@ -254,33 +285,98 @@ const Meetings = () => {
           )}
 
           <div className="flex-1 flex flex-col min-h-0">
-            <div className={`flex-1 grid gap-4 sm:gap-6 overflow-y-auto p-1 scroll-smooth ${
-              participants.length <= 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full' : 
-              participants.length <= 2 ? 'grid-cols-1 md:grid-cols-2' : 
-              participants.length <= 4 ? 'grid-cols-1 sm:grid-cols-2' : 
-              'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-            }`}>
-              {/* Local Participant */}
-              <ParticipantTile 
-                stream={localStream} 
-                name={profile?.full_name} 
-                isLocal={true} 
-                isStreaming={isJoined}
-                participantId={profile?.id}
-              />
+            {pinnedSessionId ? (() => {
+              const pinnedParticipant = participants.find(p => p.sessionId === pinnedSessionId) || {
+                sessionId,
+                userId: profile?.id,
+                userName: profile?.full_name,
+                isStreaming: isJoined,
+                isScreenSharing: localIsScreenSharing
+              };
+              const streamToUse = pinnedParticipant.sessionId === sessionId ? localStream : remoteStreams[pinnedParticipant.sessionId];
 
-              {/* Remote Participants */}
-              {participants.filter(p => p.sessionId !== sessionId).map((p) => (
+              return (
+                <div className="flex-1 flex flex-col lg:flex-row gap-4 sm:gap-6 p-1 min-h-0">
+                  {/* Pinned Video */}
+                  <div className="flex-[3] lg:flex-[4] min-h-0 rounded-3xl overflow-hidden bg-black relative">
+                    <ParticipantTile 
+                      stream={streamToUse}
+                      name={pinnedParticipant.userName}
+                      isLocal={pinnedParticipant.sessionId === sessionId}
+                      isStreaming={pinnedParticipant.isStreaming}
+                      isScreenSharing={pinnedParticipant.isScreenSharing}
+                      participantId={pinnedParticipant.userId}
+                      isPinned={true}
+                      onPin={() => handlePin(pinnedParticipant.sessionId)}
+                    />
+                  </div>
+                  {/* Thumbnails */}
+                  <div className="flex-1 flex lg:flex-col gap-4 overflow-x-auto lg:overflow-y-auto p-1 min-h-[140px] lg:min-h-0 scroll-smooth items-center lg:items-stretch">
+                    {/* Show local if not pinned */}
+                    {pinnedParticipant.sessionId !== sessionId && (
+                      <div className="w-48 lg:w-full shrink-0">
+                        <ParticipantTile 
+                          stream={localStream}
+                          name={profile?.full_name}
+                          isLocal={true}
+                          isStreaming={isJoined}
+                          isScreenSharing={localIsScreenSharing}
+                          participantId={profile?.id}
+                          isPinned={false}
+                          onPin={() => handlePin(sessionId)}
+                        />
+                      </div>
+                    )}
+                    {participants.filter(p => p.sessionId !== sessionId && p.sessionId !== pinnedParticipant.sessionId).map(p => (
+                      <div key={p.sessionId} className="w-48 lg:w-full shrink-0">
+                        <ParticipantTile 
+                          stream={remoteStreams[p.sessionId]}
+                          name={p.userName}
+                          isLocal={false}
+                          isStreaming={p.isStreaming}
+                          isScreenSharing={p.isScreenSharing}
+                          participantId={p.userId}
+                          isPinned={false}
+                          onPin={() => handlePin(p.sessionId)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className={`flex-1 grid gap-4 sm:gap-6 overflow-y-auto p-1 scroll-smooth ${
+                participants.length <= 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full' : 
+                participants.length <= 2 ? 'grid-cols-1 md:grid-cols-2' : 
+                participants.length <= 4 ? 'grid-cols-1 sm:grid-cols-2' : 
+                'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+              }`}>
+                {/* Local Participant */}
                 <ParticipantTile 
-                  key={p.sessionId}
-                  stream={remoteStreams[p.sessionId]} 
-                  name={p.userName} 
-                  isLocal={false}
-                  isStreaming={p.isStreaming}
-                  participantId={p.userId}
+                  stream={localStream} 
+                  name={profile?.full_name} 
+                  isLocal={true} 
+                  isStreaming={isJoined}
+                  isScreenSharing={localIsScreenSharing}
+                  participantId={profile?.id}
+                  onPin={() => handlePin(sessionId)}
                 />
-              ))}
-            </div>
+
+                {/* Remote Participants */}
+                {participants.filter(p => p.sessionId !== sessionId).map((p) => (
+                  <ParticipantTile 
+                    key={p.sessionId}
+                    stream={remoteStreams[p.sessionId]} 
+                    name={p.userName} 
+                    isLocal={false}
+                    isStreaming={p.isStreaming}
+                    isScreenSharing={p.isScreenSharing}
+                    participantId={p.userId}
+                    onPin={() => handlePin(p.sessionId)}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Controls Bar */}
             <div className="mt-4 sm:mt-6 flex items-center justify-center gap-2 sm:gap-4 py-3 sm:py-4 px-3 sm:px-6 bg-white border border-gray-100 rounded-[24px] sm:rounded-3xl shadow-xl shadow-gray-200/50 overflow-x-auto">
@@ -306,9 +402,15 @@ const Meetings = () => {
 
               <div className="flex items-center gap-1 sm:gap-2">
                 <button 
-                  onClick={startScreenShare}
-                  className="p-2.5 sm:p-3.5 bg-gray-50 text-secondary hover:bg-gray-100 rounded-xl sm:rounded-2xl transition-all"
-                  title="Share Screen"
+                  onClick={() => {
+                    if (localIsScreenSharing) {
+                      stopScreenShare();
+                    } else {
+                      startScreenShare();
+                    }
+                  }}
+                  className={`p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl transition-all ${localIsScreenSharing ? 'bg-accent/10 text-accent ring-1 ring-accent' : 'bg-gray-50 text-secondary hover:bg-gray-100'}`}
+                  title={localIsScreenSharing ? "Stop Sharing" : "Share Screen"}
                 >
                   <Monitor size={20} className="sm:w-[22px] sm:h-[22px]" />
                 </button>

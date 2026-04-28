@@ -6,6 +6,7 @@ export const useWebRTC = (roomId, userId, userName) => {
   const [remoteStreams, setRemoteStreams] = useState({});
   const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
+  const [localIsScreenSharing, setLocalIsScreenSharing] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
   const [messages, setMessages] = useState(() => {
     // Load from session storage for the specific room
@@ -119,6 +120,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId: p.userId,
           userName: p.userName,
           isStreaming: p.isStreaming,
+          isScreenSharing: p.isScreenSharing || false,
           joinedAt: p.joinedAt
         }));
 
@@ -146,6 +148,7 @@ export const useWebRTC = (roomId, userId, userName) => {
                 userId: p.userId,
                 userName: p.userName,
                 isStreaming: p.isStreaming,
+                isScreenSharing: p.isScreenSharing || false,
                 joinedAt: p.joinedAt
               });
             }
@@ -276,6 +279,7 @@ export const useWebRTC = (roomId, userId, userName) => {
             userId, 
             userName, 
             isStreaming: false,
+            isScreenSharing: false,
             joinedAt: new Date().toISOString() 
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -310,6 +314,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId, 
           userName, 
           isStreaming: true,
+          isScreenSharing: localIsScreenSharing,
           joinedAt: new Date().toISOString(),
           sessionId // Include sessionId in metadata for easier debugging
         });
@@ -361,6 +366,18 @@ export const useWebRTC = (roomId, userId, userName) => {
         }
       });
 
+      setLocalIsScreenSharing(true);
+      if (channelRef.current) {
+        await channelRef.current.track({
+          userId,
+          userName,
+          isStreaming: true,
+          isScreenSharing: true,
+          joinedAt: new Date().toISOString(),
+          sessionId
+        });
+      }
+
       videoTrack.onended = () => {
         stopScreenShare(videoTrack);
       };
@@ -397,6 +414,18 @@ export const useWebRTC = (roomId, userId, userName) => {
         if (videoSender) {
           await videoSender.replaceTrack(cameraTrack);
         }
+      }
+      
+      setLocalIsScreenSharing(false);
+      if (channelRef.current) {
+        await channelRef.current.track({
+          userId,
+          userName,
+          isStreaming: true,
+          isScreenSharing: false,
+          joinedAt: new Date().toISOString(),
+          sessionId
+        });
       }
     } catch (err) {
       console.error('Failed to stop screen share', err);
@@ -439,11 +468,13 @@ export const useWebRTC = (roomId, userId, userName) => {
     toggleVideo,
     toggleAudio,
     startScreenShare,
+    stopScreenShare,
     isJoined,
     participants,
     sessionId, // Export local sessionId
     activeParticipants: participants.filter(p => p.isStreaming),
     isMeetingActive: participants.some(p => p.isStreaming),
+    localIsScreenSharing,
     connectionStatus,
     messages,
     sendMessage
