@@ -349,7 +349,7 @@ const Meetings = () => {
                 </div>
               );
             })() : (
-              <div className={`flex-1 grid gap-4 sm:gap-6 overflow-y-auto p-1 scroll-smooth ${
+              <div className={`flex-1 grid gap-4 sm:gap-6 overflow-y-auto p-1 scroll-smooth auto-rows-max ${
                 participants.length <= 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full' : 
                 participants.length <= 2 ? 'grid-cols-1 md:grid-cols-2' : 
                 participants.length <= 4 ? 'grid-cols-1 sm:grid-cols-2' : 

@@ -114,19 +114,27 @@ export const useWebRTC = (roomId, userId, userName) => {
         const state = channel.presenceState();
         console.log('Presence Sync State:', state);
         
-        // Convert presence state to list of participant info and uniqueify by userId
-        const allUsers = Object.values(state).flat().map(p => ({
-          sessionId: p.presence_ref,
-          userId: p.userId,
-          userName: p.userName,
-          isStreaming: p.isStreaming,
-          isVideoOn: p.isVideoOn !== false, // default to true if missing
-          isScreenSharing: p.isScreenSharing || false,
-          joinedAt: p.joinedAt
-        }));
+        // Uniqueify by userId to prevent ghost connections (e.g. from reloading) showing multiple tiles
+        const userMap = new Map();
+        Object.values(state).flat().forEach(p => {
+          // Ignore ghost presence states of the local user
+          if (p.userId === userId && p.presence_ref !== sessionId) return;
+          
+          const existing = userMap.get(p.userId);
+          if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+            userMap.set(p.userId, {
+              sessionId: p.presence_ref,
+              userId: p.userId,
+              userName: p.userName,
+              isStreaming: p.isStreaming,
+              isVideoOn: p.isVideoOn !== false,
+              isScreenSharing: p.isScreenSharing || false,
+              joinedAt: p.joinedAt
+            });
+          }
+        });
 
-        // No longer uniqueifying by userId to allow multiple devices
-        setParticipants(allUsers);
+        setParticipants(Array.from(userMap.values()));
 
         // Create peer connections and handle negotiation for users who are streaming
         Object.values(state).flat().forEach(async (p) => {
@@ -141,10 +149,13 @@ export const useWebRTC = (roomId, userId, userName) => {
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         console.log('User joined presence:', key, newPresences);
         setParticipants(prev => {
-          const all = [...prev];
+          const userMap = new Map(prev.map(p => [p.userId, p]));
           newPresences.forEach(p => {
-            if (!all.find(x => x.sessionId === p.presence_ref)) {
-              all.push({
+            if (p.userId === userId && p.presence_ref !== sessionId) return;
+            
+            const existing = userMap.get(p.userId);
+            if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
+              userMap.set(p.userId, {
                 sessionId: p.presence_ref,
                 userId: p.userId,
                 userName: p.userName,
@@ -155,7 +166,7 @@ export const useWebRTC = (roomId, userId, userName) => {
               });
             }
           });
-          return all;
+          return Array.from(userMap.values());
         });
         
         // If a newly joined user is already streaming, connect to them
