@@ -38,16 +38,16 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, isVideoOn, partic
 
   return (
     <div className={`relative bg-secondary/95 rounded-2xl overflow-hidden shadow-2xl group animate-fade-in ring-1 ring-white/10 ${isPinned ? 'w-full h-full' : 'aspect-video'}`}>
-      {isStreaming && (isVideoOn || isScreenSharing) ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className={`w-full h-full ${isScreenSharing ? 'object-contain bg-black' : 'object-cover'} ${isLocal && !isScreenSharing ? 'scale-x-[-1]' : ''}`}
-        />
-      ) : (
-        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-secondary to-slate-900">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={isLocal}
+        className={`w-full h-full ${isStreaming && (isVideoOn || isScreenSharing) ? 'block' : 'hidden'} ${isScreenSharing ? 'object-contain bg-black' : 'object-cover'} ${isLocal && !isScreenSharing ? 'scale-x-[-1]' : ''}`}
+      />
+      
+      {(!isStreaming || (!isVideoOn && !isScreenSharing)) && (
+        <div className="absolute inset-0 w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-secondary to-slate-900">
           <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center text-primary text-2xl font-bold border-2 border-primary/30 shadow-lg mb-2">
             {initials}
           </div>
