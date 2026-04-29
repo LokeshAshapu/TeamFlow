@@ -264,7 +264,6 @@ export const useWebRTC = (roomId, userId, userName) => {
         };
         setMessages(prev => {
           const next = [...prev, newMessage];
-          sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(next));
           return next;
         });
       })
@@ -288,7 +287,6 @@ export const useWebRTC = (roomId, userId, userName) => {
             const combined = [...prev, ...payload.messages];
             const unique = Array.from(new Map(combined.map(m => [m.id, m])).values());
             unique.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(unique));
             return unique;
           });
         }
@@ -336,6 +334,7 @@ export const useWebRTC = (roomId, userId, userName) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       setStream(stream);
+      originalCameraTrackRef.current = stream.getVideoTracks()[0];
       
       Object.values(peersRef.current).forEach(({ pc }) => {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -390,6 +389,8 @@ export const useWebRTC = (roomId, userId, userName) => {
     }
   };
 
+  const originalCameraTrackRef = useRef(null);
+
   const startScreenShare = async () => {
     try {
       const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -398,12 +399,14 @@ export const useWebRTC = (roomId, userId, userName) => {
       // Update local stream for local tile visibility
       if (localStreamRef.current) {
         const currentVideoTrack = localStreamRef.current.getVideoTracks()[0];
-        if (currentVideoTrack) {
+        if (currentVideoTrack && currentVideoTrack !== videoTrack) {
+          originalCameraTrackRef.current = currentVideoTrack;
           localStreamRef.current.removeTrack(currentVideoTrack);
-          localStreamRef.current.addTrack(videoTrack);
-          // Trigger a re-render by setting a "new" stream object (clone or state update)
-          setStream(new MediaStream(localStreamRef.current.getTracks()));
+          // Do NOT stop() the camera track so we can restore it instantly later
         }
+        localStreamRef.current.addTrack(videoTrack);
+        // Trigger a re-render by setting a "new" stream object (clone or state update)
+        setStream(new MediaStream(localStreamRef.current.getTracks()));
       }
 
       Object.values(peersRef.current).forEach(({ pc }) => {
@@ -423,7 +426,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userId,
           userName,
           isStreaming: true,
-          isVideoOn: localStreamRef.current ? localStreamRef.current.getVideoTracks()[0]?.enabled : true,
+          isVideoOn: true,
           isScreenSharing: true,
           joinedAt: new Date().toISOString(),
           sessionId
@@ -444,9 +447,18 @@ export const useWebRTC = (roomId, userId, userName) => {
     try {
       if (screenTrack) screenTrack.stop();
       
-      // Re-acquire camera stream
-      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const cameraTrack = cameraStream.getVideoTracks()[0];
+      let cameraTrack = originalCameraTrackRef.current;
+      
+      // Re-acquire camera stream only as a fallback
+      if (!cameraTrack || cameraTrack.readyState === 'ended') {
+        try {
+          const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          cameraTrack = cameraStream.getVideoTracks()[0];
+          originalCameraTrackRef.current = cameraTrack;
+        } catch (e) {
+          console.warn('Fallback camera acquisition failed', e);
+        }
+      }
 
       if (localStreamRef.current) {
         const currentTracks = localStreamRef.current.getTracks();
@@ -456,7 +468,9 @@ export const useWebRTC = (roomId, userId, userName) => {
             t.stop();
           }
         });
-        localStreamRef.current.addTrack(cameraTrack);
+        if (cameraTrack) {
+          localStreamRef.current.addTrack(cameraTrack);
+        }
         setStream(new MediaStream(localStreamRef.current.getTracks()));
       }
 
@@ -466,24 +480,26 @@ export const useWebRTC = (roomId, userId, userName) => {
         if (videoSender) {
           pc.removeTrack(videoSender);
         }
-        pc.addTrack(cameraTrack, localStreamRef.current);
+        if (cameraTrack && localStreamRef.current) {
+          pc.addTrack(cameraTrack, localStreamRef.current);
+        }
       }
-      
+    } catch (err) {
+      console.error('Failed to properly stop screen share', err);
+    } finally {
       setScreenSharing(false);
       if (channelRef.current) {
-        await channelRef.current.track({
+        channelRef.current.track({
           ...channelRef.current.presenceState()[sessionId]?.[0],
           userId,
           userName,
           isStreaming: true,
-          isVideoOn: localStreamRef.current ? localStreamRef.current.getVideoTracks()[0]?.enabled : true,
+          isVideoOn: originalCameraTrackRef.current ? originalCameraTrackRef.current.enabled : false,
           isScreenSharing: false,
           joinedAt: new Date().toISOString(),
           sessionId
         });
       }
-    } catch (err) {
-      console.error('Failed to stop screen share', err);
     }
   };
 
