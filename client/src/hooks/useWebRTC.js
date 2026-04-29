@@ -3,16 +3,35 @@ import { supabase } from '../lib/supabase';
 
 export const useWebRTC = (roomId, userId, userName) => {
   const [localStream, setLocalStream] = useState(null);
+  const localStreamRef = useRef(null);
+  const setStream = (stream) => {
+    setLocalStream(stream);
+    localStreamRef.current = stream;
+  };
+
   const [remoteStreams, setRemoteStreams] = useState({});
   const [participants, setParticipants] = useState([]);
   const [isJoined, setIsJoined] = useState(false);
+  
   const [localIsScreenSharing, setLocalIsScreenSharing] = useState(false);
+  const localIsScreenSharingRef = useRef(false);
+  const setScreenSharing = (val) => {
+    setLocalIsScreenSharing(val);
+    localIsScreenSharingRef.current = val;
+  };
+
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
   const [messages, setMessages] = useState(() => {
     // Load from session storage for the specific room
     const saved = sessionStorage.getItem(`chat-${roomId}`);
     return saved ? JSON.parse(saved) : [];
   });
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const channelRef = useRef(null);
   const peersRef = useRef({}); // Map sessionId to { pc, makingOffer, ignoreOffer }
   const sessionId = useRef(Math.random().toString(36).substring(7)).current;
@@ -51,8 +70,9 @@ export const useWebRTC = (roomId, userId, userName) => {
     // Politeness logic: lexicographical comparison of session IDs
     const isPolite = sessionId < peerSessionId;
 
-    if (localStream) {
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+    const currentStream = localStreamRef.current;
+    if (currentStream) {
+      currentStream.getTracks().forEach(track => pc.addTrack(track, currentStream));
     }
 
     pc.onicecandidate = ({ candidate }) => {
@@ -96,7 +116,7 @@ export const useWebRTC = (roomId, userId, userName) => {
     };
 
     return pc;
-  }, [localStream, handleUserLeft, sessionId]);
+  }, [handleUserLeft, sessionId]);
 
   useEffect(() => {
     if (!roomId || !userId) return;
@@ -251,12 +271,12 @@ export const useWebRTC = (roomId, userId, userName) => {
       })
       .on('broadcast', { event: 'history-request' }, ({ payload }) => {
         // If we have messages, send them to the new joiner
-        if (messages.length > 0) {
+        if (messagesRef.current.length > 0) {
           console.log('Sending history to:', payload.from);
           channel.send({
             type: 'broadcast',
             event: 'history-response',
-            payload: { to: payload.from, messages }
+            payload: { to: payload.from, messages: messagesRef.current }
           });
         }
       })
@@ -305,8 +325,8 @@ export const useWebRTC = (roomId, userId, userName) => {
 
     return () => {
       channel.unsubscribe();
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
       }
       Object.values(peersRef.current).forEach(p => p.pc.close());
       peersRef.current = {};
@@ -316,7 +336,7 @@ export const useWebRTC = (roomId, userId, userName) => {
   const startStream = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setLocalStream(stream);
+      setStream(stream);
       
       Object.values(peersRef.current).forEach(({ pc }) => {
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -329,7 +349,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userName, 
           isStreaming: true,
           isVideoOn: true,
-          isScreenSharing: localIsScreenSharing,
+          isScreenSharing: localIsScreenSharingRef.current,
           joinedAt: new Date().toISOString(),
           sessionId // Include sessionId in metadata for easier debugging
         });
@@ -342,8 +362,8 @@ export const useWebRTC = (roomId, userId, userName) => {
   };
 
   const toggleVideo = async () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
       const newEnabledState = !videoTrack.enabled;
       videoTrack.enabled = newEnabledState;
       
@@ -354,7 +374,7 @@ export const useWebRTC = (roomId, userId, userName) => {
           userName,
           isStreaming: true,
           isVideoOn: newEnabledState,
-          isScreenSharing: localIsScreenSharing,
+          isScreenSharing: localIsScreenSharingRef.current,
           joinedAt: new Date().toISOString(),
           sessionId
         });
@@ -365,8 +385,8 @@ export const useWebRTC = (roomId, userId, userName) => {
   };
 
   const toggleAudio = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
+    if (localStreamRef.current) {
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
       audioTrack.enabled = !audioTrack.enabled;
     }
   };
@@ -377,13 +397,13 @@ export const useWebRTC = (roomId, userId, userName) => {
       const videoTrack = screenStream.getVideoTracks()[0];
       
       // Update local stream for local tile visibility
-      if (localStream) {
-        const currentVideoTrack = localStream.getVideoTracks()[0];
+      if (localStreamRef.current) {
+        const currentVideoTrack = localStreamRef.current.getVideoTracks()[0];
         if (currentVideoTrack) {
-          localStream.removeTrack(currentVideoTrack);
-          localStream.addTrack(videoTrack);
+          localStreamRef.current.removeTrack(currentVideoTrack);
+          localStreamRef.current.addTrack(videoTrack);
           // Trigger a re-render by setting a "new" stream object (clone or state update)
-          setLocalStream(new MediaStream(localStream.getTracks()));
+          setStream(new MediaStream(localStreamRef.current.getTracks()));
         }
       }
 
@@ -393,17 +413,20 @@ export const useWebRTC = (roomId, userId, userName) => {
           sender.replaceTrack(videoTrack);
         } else {
           // If no video sender exists, add the track
-          pc.addTrack(videoTrack, localStream);
+          if (localStreamRef.current) {
+            pc.addTrack(videoTrack, localStreamRef.current);
+          }
         }
       });
 
-      setLocalIsScreenSharing(true);
+      setScreenSharing(true);
       if (channelRef.current) {
         await channelRef.current.track({
+          ...channelRef.current.presenceState()[sessionId]?.[0],
           userId,
           userName,
           isStreaming: true,
-          isVideoOn: localStream ? localStream.getVideoTracks()[0]?.enabled : true,
+          isVideoOn: localStreamRef.current ? localStreamRef.current.getVideoTracks()[0]?.enabled : true,
           isScreenSharing: true,
           joinedAt: new Date().toISOString(),
           sessionId
@@ -425,19 +448,19 @@ export const useWebRTC = (roomId, userId, userName) => {
       if (screenTrack) screenTrack.stop();
       
       // Re-acquire camera stream
-      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
       const cameraTrack = cameraStream.getVideoTracks()[0];
 
-      if (localStream) {
-        const currentTracks = localStream.getTracks();
+      if (localStreamRef.current) {
+        const currentTracks = localStreamRef.current.getTracks();
         currentTracks.forEach(t => {
           if (t.kind === 'video') {
-            localStream.removeTrack(t);
+            localStreamRef.current.removeTrack(t);
             t.stop();
           }
         });
-        localStream.addTrack(cameraTrack);
-        setLocalStream(new MediaStream(localStream.getTracks()));
+        localStreamRef.current.addTrack(cameraTrack);
+        setStream(new MediaStream(localStreamRef.current.getTracks()));
       }
 
       for (const { pc } of Object.values(peersRef.current)) {
@@ -448,13 +471,14 @@ export const useWebRTC = (roomId, userId, userName) => {
         }
       }
       
-      setLocalIsScreenSharing(false);
+      setScreenSharing(false);
       if (channelRef.current) {
         await channelRef.current.track({
+          ...channelRef.current.presenceState()[sessionId]?.[0],
           userId,
           userName,
           isStreaming: true,
-          isVideoOn: localStream ? localStream.getVideoTracks()[0]?.enabled : true,
+          isVideoOn: localStreamRef.current ? localStreamRef.current.getVideoTracks()[0]?.enabled : true,
           isScreenSharing: false,
           joinedAt: new Date().toISOString(),
           sessionId
