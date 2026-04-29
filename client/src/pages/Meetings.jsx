@@ -392,7 +392,29 @@ const Meetings = () => {
                                 {msg.attachment.type.startsWith('image/') ? (
                                   <img src={msg.attachment.data} alt="attachment" className="max-w-full rounded-lg border border-white/20" />
                                 ) : (
-                                  <a href={msg.attachment.data} download={msg.attachment.name} className="flex items-center gap-2 p-2 bg-black/20 rounded-lg hover:bg-black/40 transition-colors text-white">
+                                  <a 
+                                    href="#" 
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      try {
+                                        fetch(msg.attachment.data)
+                                          .then(res => res.blob())
+                                          .then(blob => {
+                                            const url = window.URL.createObjectURL(blob);
+                                            const a = document.createElement('a');
+                                            a.href = url;
+                                            a.download = msg.attachment.name;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            document.body.removeChild(a);
+                                            window.URL.revokeObjectURL(url);
+                                          });
+                                      } catch (err) {
+                                        console.error("Download failed:", err);
+                                      }
+                                    }}
+                                    className="flex items-center gap-2 p-2 bg-black/20 rounded-lg hover:bg-black/40 transition-colors text-white"
+                                  >
                                     <FileText size={16} />
                                     <span className="truncate max-w-[150px]">{msg.attachment.name}</span>
                                     <Download size={14} className="ml-auto" />
