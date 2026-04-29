@@ -87,9 +87,11 @@ export const useWebRTC = (roomId, userId, userName) => {
 
     pc.ontrack = ({ streams }) => {
       console.log('Received remote track from:', peerSessionId);
+      // Create a new MediaStream so React detects the reference change when tracks arrive asynchronously
+      const newStream = new MediaStream(streams[0].getTracks());
       setRemoteStreams(prev => ({
         ...prev,
-        [peerSessionId]: streams[0]
+        [peerSessionId]: newStream
       }));
     };
 
