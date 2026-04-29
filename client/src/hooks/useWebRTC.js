@@ -491,13 +491,14 @@ export const useWebRTC = (roomId, userId, userName) => {
     }
   };
 
-  const sendMessage = (content) => {
-    if (!channelRef.current || !content.trim()) return;
+  const sendMessage = (content, attachment = null) => {
+    if (!channelRef.current || (!content.trim() && !attachment)) return;
 
     const message = {
       senderId: userId,
       senderName: userName,
-      content: content.trim()
+      content: content?.trim() || '',
+      attachment
     };
 
     channelRef.current.send({
