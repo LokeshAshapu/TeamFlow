@@ -32,7 +32,7 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, isVideoOn, partic
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
     }
-  }, [stream]);
+  }, [stream, isScreenSharing, isVideoOn]);
 
   const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
 
