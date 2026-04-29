@@ -21,11 +21,7 @@ export const useWebRTC = (roomId, userId, userName) => {
   };
 
   const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connecting' | 'connected' | 'disconnected' | 'error'
-  const [messages, setMessages] = useState(() => {
-    // Load from session storage for the specific room
-    const saved = sessionStorage.getItem(`chat-${roomId}`);
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [messages, setMessages] = useState([]);
   const messagesRef = useRef(messages);
 
   useEffect(() => {
@@ -126,7 +122,8 @@ export const useWebRTC = (roomId, userId, userName) => {
     console.log('Joining Supabase channel:', roomId, 'as session:', sessionId);
     const channel = supabase.channel(roomId, {
       config: {
-        presence: { key: sessionId }
+        presence: { key: sessionId },
+        broadcast: { ack: true }
       }
     });
     channelRef.current = channel;
@@ -412,12 +409,10 @@ export const useWebRTC = (roomId, userId, userName) => {
       Object.values(peersRef.current).forEach(({ pc }) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
-          sender.replaceTrack(videoTrack);
-        } else {
-          // If no video sender exists, add the track
-          if (localStreamRef.current) {
-            pc.addTrack(videoTrack, localStreamRef.current);
-          }
+          pc.removeTrack(sender);
+        }
+        if (localStreamRef.current) {
+          pc.addTrack(videoTrack, localStreamRef.current);
         }
       });
 
@@ -469,8 +464,9 @@ export const useWebRTC = (roomId, userId, userName) => {
         const senders = pc.getSenders();
         const videoSender = senders.find(s => s.track?.kind === 'video');
         if (videoSender) {
-          await videoSender.replaceTrack(cameraTrack);
+          pc.removeTrack(videoSender);
         }
+        pc.addTrack(cameraTrack, localStreamRef.current);
       }
       
       setScreenSharing(false);
@@ -514,11 +510,7 @@ export const useWebRTC = (roomId, userId, userName) => {
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => {
-      const next = [...prev, newMessage];
-      sessionStorage.setItem(`chat-${roomId}`, JSON.stringify(next));
-      return next;
-    });
+    setMessages(prev => [...prev, newMessage]);
   };
 
   return {

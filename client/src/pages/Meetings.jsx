@@ -228,7 +228,7 @@ const Meetings = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col font-sans text-gray-100 animate-fade-in">
+    <div className="h-[calc(100vh-6rem)] relative flex flex-col font-sans text-gray-100 bg-gray-950 rounded-2xl overflow-hidden border border-gray-800 shadow-2xl animate-fade-in">
       {/* Zoom-like Dark Header */}
       <header className="flex items-center justify-between px-6 py-4 bg-gray-900 border-b border-gray-800 shrink-0 shadow-lg z-20">
         <div className="flex items-center gap-4">
@@ -303,7 +303,7 @@ const Meetings = () => {
                 )}
                 
                 {/* Remote Participants in Sidebar */}
-                {participants.filter(p => p.sessionId !== sessionId && p.sessionId !== pinnedSessionId).map((p) => (
+                {participants.filter(p => p.userId !== profile?.id && p.sessionId !== pinnedSessionId).map((p) => (
                   <div key={p.sessionId} className="w-48 xl:w-full shrink-0">
                     <ParticipantTile 
                       stream={remoteStreams[p.sessionId]} 
@@ -321,37 +321,38 @@ const Meetings = () => {
             </div>
           ) : (
             /* Grid View */
-            <div className={`flex-1 grid gap-4 place-content-center w-full h-full p-4 ${
-              participantCount <= 1 ? 'grid-cols-1 max-w-4xl mx-auto' : 
-              participantCount === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-6xl mx-auto' : 
-              participantCount <= 4 ? 'grid-cols-2 max-w-6xl mx-auto' : 
-              participantCount <= 6 ? 'grid-cols-2 md:grid-cols-3 max-w-7xl mx-auto' : 
-              'grid-cols-3 lg:grid-cols-4 max-w-7xl mx-auto'
-            }`}>
-              <ParticipantTile 
-                stream={localStream} 
-                name={profile?.full_name} 
-                isLocal={true} 
-                isStreaming={isJoined}
-                isVideoOn={isVideoOn}
-                isScreenSharing={localIsScreenSharing}
-                participantId={profile?.id}
-                onPin={() => handlePin(sessionId)}
-              />
-              
-              {participants.filter(p => p.sessionId !== sessionId).map((p) => (
+            <div className={`flex-1 p-4 w-full h-full`}>
+              <div className={`grid gap-4 w-full h-full ${
+                participantCount <= 1 ? 'grid-cols-1 md:grid-cols-1 max-w-4xl mx-auto' : 
+                participantCount === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-6xl mx-auto' : 
+                participantCount <= 4 ? 'grid-cols-2 max-w-6xl mx-auto' : 
+                'grid-cols-2 md:grid-cols-3 max-w-7xl mx-auto'
+              }`}>
                 <ParticipantTile 
-                  key={p.sessionId}
-                  stream={remoteStreams[p.sessionId]} 
-                  name={p.userName} 
-                  isLocal={false}
-                  isStreaming={p.isStreaming}
-                  isVideoOn={p.isVideoOn}
-                  isScreenSharing={p.isScreenSharing}
-                  participantId={p.userId}
-                  onPin={() => handlePin(p.sessionId)}
+                  stream={localStream} 
+                  name={profile?.full_name} 
+                  isLocal={true} 
+                  isStreaming={isJoined}
+                  isVideoOn={isVideoOn}
+                  isScreenSharing={localIsScreenSharing}
+                  participantId={profile?.id}
+                  onPin={() => handlePin(sessionId)}
                 />
-              ))}
+                
+                {participants.filter(p => p.userId !== profile?.id).map((p) => (
+                  <ParticipantTile 
+                    key={p.sessionId}
+                    stream={remoteStreams[p.sessionId]} 
+                    name={p.userName} 
+                    isLocal={false}
+                    isStreaming={p.isStreaming}
+                    isVideoOn={p.isVideoOn}
+                    isScreenSharing={p.isScreenSharing}
+                    participantId={p.userId}
+                    onPin={() => handlePin(p.sessionId)}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
