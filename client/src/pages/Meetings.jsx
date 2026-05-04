@@ -22,7 +22,7 @@ const ParticipantTile = ({ stream, name, isLocal, isStreaming, isVideoOn, partic
   const initials = name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
 
   return (
-    <div className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-2xl group transition-all duration-300 ring-1 ring-white/10 ${isPinned ? 'w-full h-full' : 'aspect-video w-full'}`}>
+    <div className={`relative bg-gray-900 rounded-xl overflow-hidden shadow-2xl group transition-all duration-300 ring-1 ring-white/10 w-full h-full`}>
       {/* 
         CRITICAL FIX: 
         We use opacity-0 and pointer-events-none instead of display:none (hidden). 
@@ -288,7 +288,7 @@ const Meetings = () => {
               <div className="w-full xl:w-64 flex xl:flex-col gap-4 overflow-x-auto xl:overflow-y-auto pb-2 xl:pb-0 scrollbar-hide">
                 {/* Local Participant in Sidebar */}
                 {pinnedSessionId !== sessionId && (
-                  <div className="w-48 xl:w-full shrink-0">
+                  <div className="w-48 xl:w-full shrink-0 aspect-video">
                     <ParticipantTile 
                       stream={localStream} 
                       name={profile?.full_name} 
@@ -304,7 +304,7 @@ const Meetings = () => {
                 
                 {/* Remote Participants in Sidebar */}
                 {participants.filter(p => p.sessionId !== sessionId && p.sessionId !== pinnedSessionId).map((p) => (
-                  <div key={p.sessionId} className="w-48 xl:w-full shrink-0">
+                  <div key={p.sessionId} className="w-48 xl:w-full shrink-0 aspect-video">
                     <ParticipantTile 
                       stream={remoteStreams[p.sessionId]} 
                       name={p.userName} 
@@ -322,7 +322,7 @@ const Meetings = () => {
           ) : (
             /* Grid View */
             <div className={`flex-1 p-4 w-full h-full`}>
-              <div className={`grid gap-4 w-full h-full ${
+              <div className={`grid gap-4 w-full h-full auto-rows-fr ${
                 participantCount <= 1 ? 'grid-cols-1 md:grid-cols-1 max-w-4xl mx-auto' : 
                 participantCount === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-6xl mx-auto' : 
                 participantCount <= 4 ? 'grid-cols-2 max-w-6xl mx-auto' : 
