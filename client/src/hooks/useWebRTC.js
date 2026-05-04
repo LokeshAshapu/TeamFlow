@@ -81,14 +81,24 @@ export const useWebRTC = (roomId, userId, userName) => {
       }
     };
 
-    pc.ontrack = ({ streams }) => {
+    pc.ontrack = (event) => {
       console.log('Received remote track from:', peerSessionId);
-      // Create a new MediaStream so React detects the reference change when tracks arrive asynchronously
-      const newStream = new MediaStream(streams[0].getTracks());
-      setRemoteStreams(prev => ({
-        ...prev,
-        [peerSessionId]: newStream
-      }));
+      setRemoteStreams(prev => {
+        // Use the native stream directly. Reassigning a new MediaStream on every track 
+        // can interrupt playback and cause black video / no audio.
+        const stream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track]);
+        
+        // If we already have this stream for this peer, we can just return prev to avoid unnecessary re-renders,
+        // but returning a new object ensures React knows the peer now has a stream.
+        if (prev[peerSessionId] === stream) {
+          return prev;
+        }
+        
+        return {
+          ...prev,
+          [peerSessionId]: stream
+        };
+      });
     };
 
     pc.onnegotiationneeded = async () => {
@@ -133,15 +143,12 @@ export const useWebRTC = (roomId, userId, userName) => {
         const state = channel.presenceState();
         console.log('Presence Sync State:', state);
         
-        // Uniqueify by userId to prevent ghost connections (e.g. from reloading) showing multiple tiles
+        // Uniqueify by sessionId to allow multiple devices/tabs from the same user
         const userMap = new Map();
         Object.values(state).flat().forEach(p => {
-          // Ignore ghost presence states of the local user
-          if (p.userId === userId && p.presence_ref !== sessionId) return;
-          
-          const existing = userMap.get(p.userId);
+          const existing = userMap.get(p.presence_ref);
           if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-            userMap.set(p.userId, {
+            userMap.set(p.presence_ref, {
               sessionId: p.presence_ref,
               userId: p.userId,
               userName: p.userName,
@@ -168,13 +175,11 @@ export const useWebRTC = (roomId, userId, userName) => {
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
         console.log('User joined presence:', key, newPresences);
         setParticipants(prev => {
-          const userMap = new Map(prev.map(p => [p.userId, p]));
+          const userMap = new Map(prev.map(p => [p.sessionId, p]));
           newPresences.forEach(p => {
-            if (p.userId === userId && p.presence_ref !== sessionId) return;
-            
-            const existing = userMap.get(p.userId);
+            const existing = userMap.get(p.presence_ref);
             if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-              userMap.set(p.userId, {
+              userMap.set(p.presence_ref, {
                 sessionId: p.presence_ref,
                 userId: p.userId,
                 userName: p.userName,
@@ -412,9 +417,8 @@ export const useWebRTC = (roomId, userId, userName) => {
       Object.values(peersRef.current).forEach(({ pc }) => {
         const sender = pc.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
-          pc.removeTrack(sender);
-        }
-        if (localStreamRef.current) {
+          sender.replaceTrack(videoTrack);
+        } else if (localStreamRef.current) {
           pc.addTrack(videoTrack, localStreamRef.current);
         }
       });
@@ -476,12 +480,9 @@ export const useWebRTC = (roomId, userId, userName) => {
 
       for (const { pc } of Object.values(peersRef.current)) {
         const senders = pc.getSenders();
-        const videoSender = senders.find(s => s.track?.kind === 'video');
-        if (videoSender) {
-          pc.removeTrack(videoSender);
-        }
-        if (cameraTrack && localStreamRef.current) {
-          pc.addTrack(cameraTrack, localStreamRef.current);
+        const videoSender = senders.find(s => s.track?.kind === 'video' || (s.track === null && s.kind === 'video'));
+        if (videoSender && cameraTrack) {
+          videoSender.replaceTrack(cameraTrack);
         }
       }
     } catch (err) {

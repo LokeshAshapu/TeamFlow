@@ -303,7 +303,7 @@ const Meetings = () => {
                 )}
                 
                 {/* Remote Participants in Sidebar */}
-                {participants.filter(p => p.userId !== profile?.id && p.sessionId !== pinnedSessionId).map((p) => (
+                {participants.filter(p => p.sessionId !== sessionId && p.sessionId !== pinnedSessionId).map((p) => (
                   <div key={p.sessionId} className="w-48 xl:w-full shrink-0">
                     <ParticipantTile 
                       stream={remoteStreams[p.sessionId]} 
@@ -339,7 +339,7 @@ const Meetings = () => {
                   onPin={() => handlePin(sessionId)}
                 />
                 
-                {participants.filter(p => p.userId !== profile?.id).map((p) => (
+                {participants.filter(p => p.sessionId !== sessionId).map((p) => (
                   <ParticipantTile 
                     key={p.sessionId}
                     stream={remoteStreams[p.sessionId]} 
