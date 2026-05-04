@@ -146,10 +146,12 @@ export const useWebRTC = (roomId, userId, userName) => {
         // Uniqueify by sessionId to allow multiple devices/tabs from the same user
         const userMap = new Map();
         Object.values(state).flat().forEach(p => {
-          const existing = userMap.get(p.presence_ref);
+          const sid = p.sessionId || p.presence_ref;
+          const existing = userMap.get(sid);
           if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-            userMap.set(p.presence_ref, {
-              sessionId: p.presence_ref,
+            userMap.set(sid, {
+              sessionId: sid,
+              presenceRef: p.presence_ref,
               userId: p.userId,
               userName: p.userName,
               isStreaming: p.isStreaming,
@@ -177,10 +179,12 @@ export const useWebRTC = (roomId, userId, userName) => {
         setParticipants(prev => {
           const userMap = new Map(prev.map(p => [p.sessionId, p]));
           newPresences.forEach(p => {
-            const existing = userMap.get(p.presence_ref);
+            const sid = p.sessionId || p.presence_ref;
+            const existing = userMap.get(sid);
             if (!existing || new Date(p.joinedAt) > new Date(existing.joinedAt)) {
-              userMap.set(p.presence_ref, {
-                sessionId: p.presence_ref,
+              userMap.set(sid, {
+                sessionId: sid,
+                presenceRef: p.presence_ref,
                 userId: p.userId,
                 userName: p.userName,
                 isStreaming: p.isStreaming,
@@ -316,7 +320,8 @@ export const useWebRTC = (roomId, userId, userName) => {
             isStreaming: false,
             isVideoOn: false,
             isScreenSharing: false,
-            joinedAt: new Date().toISOString() 
+            joinedAt: new Date().toISOString(),
+            sessionId
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setConnectionStatus('error');
